@@ -1,5 +1,5 @@
 
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 
 export const useClickOutside = (ref: React.RefObject<HTMLElement | null>, handler: () => void) => {
   useEffect(() => {

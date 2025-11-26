@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Layers, Search, Terminal, Play, Database, Filter, RefreshCw, Sparkles, X, Bot, Send, List } from 'lucide-react';
+import { Layers, Search, Terminal, Play, Database, Filter, RefreshCw, Sparkles, X, Bot, Send, List, AlertTriangle } from 'lucide-react';
 import { CloudWatchLogsClient, FilterLogEventsCommand, DescribeLogGroupsCommand, StartQueryCommand, GetQueryResultsCommand } from "https://esm.sh/@aws-sdk/client-cloudwatch-logs?bundle";
 import { GoogleGenAI } from "@google/genai";
 import { AwsCredentials, LogEvent, QueryResultRow, ChatMessage } from '../types';
@@ -14,6 +14,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
     const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
     const [logs, setLogs] = useState<LogEvent[]>([]);
     const [queryResults, setQueryResults] = useState<QueryResultRow[]>([]);
+    const [error, setError] = useState<string | null>(null);
     
     // UI State
     const [mode, setMode] = useState<'stream' | 'query'>('stream');
@@ -49,7 +50,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
     // Set Default SQL Query when group changes
     useEffect(() => {
         if (selectedGroup) {
-            setSqlQuery(`SELECT @timestamp, @message\nFROM \`${selectedGroup}\`\nORDER BY @timestamp DESC\nLIMIT 20`);
+            setSqlQuery(`SELECT @timestamp, @message\nFROM \`${selectedGroup}\`\nWHERE @message LIKE '%error%'\nORDER BY @timestamp DESC\nLIMIT 20`);
         }
     }, [selectedGroup]);
 
@@ -129,6 +130,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
         if (!selectedGroup) return;
         setLoadingLogs(true);
         setQueryResults([]);
+        setError(null);
 
         if (isMock) {
             setTimeout(() => {
@@ -158,6 +160,8 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
 
             const { startTimestamp, endTimestamp } = getTimeRange();
             const transpiledQuery = transpileSqlToInsights(sqlQuery);
+            
+            console.log("Transpiled Query:", transpiledQuery); // Debug
 
             const startCommand = new StartQueryCommand({
                 logGroupNames: [selectedGroup],
@@ -188,10 +192,14 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                         return obj;
                     });
                     setQueryResults(results);
+                } else if (status === 'Failed' || status === 'Cancelled' || status === 'Timeout') {
+                    setError(`Query execution ${status}. Check syntax or time range.`);
+                    break;
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
+            setError(err.message || "Query failed to execute");
         } finally {
             setLoadingLogs(false);
         }
@@ -201,6 +209,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
     const fetchLogs = async () => {
         if (!selectedGroup) return;
         setLoadingLogs(true);
+        setError(null);
         if (isMock) {
             setTimeout(() => {
                 setLogs(generateMockLogs(logLimit));
@@ -236,8 +245,9 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                 ingestionTime: e.ingestionTime || Date.now()
             })).sort((a,b) => b.timestamp - a.timestamp);
             setLogs(mapped);
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
+            setError(err.message || "Failed to fetch logs");
         } finally {
             setLoadingLogs(false);
         }
@@ -336,7 +346,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                             {filteredGroups.map(group => (
                                 <button
                                     key={group}
-                                    onClick={() => { setSelectedGroup(group); setAiMessages([]); setLogs([]); setQueryResults([]); }}
+                                    onClick={() => { setSelectedGroup(group); setAiMessages([]); setLogs([]); setQueryResults([]); setError(null); }}
                                     className={`w-full text-left px-3 py-3 text-xs font-mono break-all hover:bg-[var(--bg-hover)] transition-colors ${selectedGroup === group ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-l-2 border-[var(--accent)]' : 'text-[var(--text-muted)] border-l-2 border-transparent'}`}
                                 >
                                     {group}
@@ -363,13 +373,13 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                              
                              <div className="flex bg-[var(--bg-main)] p-1 rounded-lg border border-[var(--border)]">
                                  <button 
-                                    onClick={() => setMode('stream')}
+                                    onClick={() => { setMode('stream'); setError(null); }}
                                     className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center ${mode === 'stream' ? 'bg-[var(--accent)] text-white shadow' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                                  >
                                     <Play className="w-3 h-3 mr-1"/> Stream
                                  </button>
                                  <button 
-                                    onClick={() => setMode('query')}
+                                    onClick={() => { setMode('query'); setError(null); }}
                                     className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center ${mode === 'query' ? 'bg-[var(--accent)] text-white shadow' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                                  >
                                     <Database className="w-3 h-3 mr-1"/> SQL Query
@@ -482,9 +492,17 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                                     <div className="h-4 bg-slate-700 w-1/2 rounded"></div>
                                     <div className="h-4 bg-slate-700 w-2/3 rounded"></div>
                                 </div>
+                            ) : error ? (
+                                <div className="p-4 bg-red-900/20 border border-red-500/30 rounded text-red-300 flex items-start gap-2">
+                                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                                    <div>
+                                        <div className="font-bold mb-1">Error</div>
+                                        <div className="opacity-90 whitespace-pre-wrap">{error}</div>
+                                    </div>
+                                </div>
                             ) : mode === 'stream' ? (
                                 logs.length === 0 ? (
-                                    <div className="text-center text-slate-500 mt-10 italic">No events found.</div>
+                                    <div className="text-center text-slate-500 mt-10 italic">No events found in this time range.</div>
                                 ) : (
                                     logs.map((log, i) => {
                                         let content = log.message;
@@ -510,7 +528,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                             ) : (
                                 // Query Mode Table
                                 queryResults.length === 0 ? (
-                                    <div className="text-center text-slate-500 mt-10 italic">No results returned.</div>
+                                    <div className="text-center text-slate-500 mt-10 italic">No results returned. Try adjusting the time range or query.</div>
                                 ) : (
                                     <div className="w-full overflow-x-auto">
                                         <table className="w-full text-left border-collapse">

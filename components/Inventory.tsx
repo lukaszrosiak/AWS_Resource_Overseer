@@ -5,7 +5,12 @@ import { InventoryItem } from '../types';
 import { useClickOutside } from '../hooks';
 import { Button, Card } from './UI';
 
-export const ResourceRow = ({ item, onInvestigate }: { item: InventoryItem, onInvestigate: (item: InventoryItem) => void }) => {
+interface ResourceRowProps {
+    item: InventoryItem;
+    onInvestigate: (item: InventoryItem) => void;
+}
+
+export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate }) => {
   const [showTags, setShowTags] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const hasTags = Object.keys(item.tags).length > 0;
@@ -87,7 +92,13 @@ export const ResourceRow = ({ item, onInvestigate }: { item: InventoryItem, onIn
   );
 };
 
-export const ServiceGroup = ({ service, items, onInvestigate }: { service: string, items: InventoryItem[], onInvestigate: (item: InventoryItem) => void }) => {
+interface ServiceGroupProps {
+    service: string;
+    items: InventoryItem[];
+    onInvestigate: (item: InventoryItem) => void;
+}
+
+export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onInvestigate }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (

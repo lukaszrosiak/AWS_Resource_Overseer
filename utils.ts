@@ -30,10 +30,15 @@ export const transpileSqlToInsights = (sql: string): string => {
     let query = sql.trim();
     
     // Remove FROM clause 
+    // Matches FROM followed by a backticked, single-quoted, double-quoted string OR a continuous non-whitespace string (like a path)
     query = query.replace(/FROM\s+(`[^`]+`|'[^']+'|"[^"]+"|[\S]+)\s*/i, '');
 
+    // Map SELECT * -> fields @timestamp, @message, @logStream, @log
+    if (/^SELECT\s+\*/i.test(query)) {
+        query = query.replace(/^SELECT\s+\*/i, 'fields @timestamp, @message, @logStream, @log');
+    }
     // Map SELECT -> fields
-    if (/^SELECT\s/i.test(query)) {
+    else if (/^SELECT\s/i.test(query)) {
         query = query.replace(/^SELECT\s+/i, 'fields ');
     }
 
@@ -41,10 +46,17 @@ export const transpileSqlToInsights = (sql: string): string => {
     query = query.replace(/\s+WHERE\s+/gi, ' | filter ');
     
     // Map LIKE to CloudWatch regex syntax
-    query = query.replace(/LIKE\s+'%([^%]+)%'/gi, 'like /$1/');
-    query = query.replace(/LIKE\s+'([^']+)'/gi, 'like /$1/');
-    query = query.replace(/LIKE\s+"%([^%]+)%"/gi, 'like /$1/');
-    query = query.replace(/LIKE\s+"([^"]+)"/gi, 'like /$1/');
+    // Handles LIKE '%Pattern%' -> like /Pattern/
+    // Handles LIKE 'Pattern'   -> like /Pattern/
+    const mapLike = (match: string, quote: string, content: string) => {
+        // Remove leading/trailing % used for SQL wildcards
+        const cleanContent = content.replace(/^%|%$/g, '');
+        return `like /${cleanContent}/`;
+    };
+
+    // Regex to match LIKE '...' or LIKE "..."
+    query = query.replace(/LIKE\s+'([^']+)'/gi, (m, c) => mapLike(m, "'", c));
+    query = query.replace(/LIKE\s+"([^"]+)"/gi, (m, c) => mapLike(m, '"', c));
 
     // Map ORDER BY -> sort
     query = query.replace(/\s+ORDER BY\s+/gi, ' | sort ');

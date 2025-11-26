@@ -5,16 +5,18 @@ import { AwsCredentials, BedrockRuntime } from '../types';
 import { generateMockBedrockRuntimes } from '../mockData';
 import { Button, Card } from './UI';
 
-export const BedrockRuntimeRow = ({
+interface BedrockRuntimeRowProps {
+    runtime: BedrockRuntime;
+    credentials: AwsCredentials;
+    isMock: boolean;
+    onViewLogs: (runtimeId: string) => void;
+}
+
+export const BedrockRuntimeRow: React.FC<BedrockRuntimeRowProps> = ({
     runtime,
     credentials,
     isMock,
     onViewLogs
-}: {
-    runtime: BedrockRuntime,
-    credentials: AwsCredentials,
-    isMock: boolean,
-    onViewLogs: (runtimeId: string) => void
 }) => {
     const [details, setDetails] = useState<any>(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
