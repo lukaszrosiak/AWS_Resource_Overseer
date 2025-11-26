@@ -6,7 +6,7 @@ import {
 import { 
   Shield, Users, Search, Key, LogOut, 
   AlertTriangle, BrainCircuit, Server, ChevronDown, ChevronRight, Tag, Box, Layers, Hash, Moon, Sun, X, Globe,
-  Activity, Calendar, User, FileJson, ArrowLeft, CheckCircle, XCircle, Trash2, Edit3, PlusCircle
+  Activity, Calendar, User, FileJson, ArrowLeft, CheckCircle, XCircle, Trash2, Edit3, PlusCircle, Filter, Plus
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { ResourceGroupsTaggingAPIClient, GetResourcesCommand } from "https://esm.sh/@aws-sdk/client-resource-groups-tagging-api?bundle";
@@ -37,6 +37,11 @@ interface CloudTrailEvent {
   EventSource: string;
   Resources: any[];
   CloudTrailEvent: string; // JSON string
+}
+
+interface TagFilter {
+  key: string;
+  value: string;
 }
 
 // --- Constants ---
@@ -553,6 +558,10 @@ const App = () => {
 
   // Filtering State
   const [searchTerm, setSearchTerm] = useState('');
+  const [tagFilters, setTagFilters] = useState<TagFilter[]>([]);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [newTagKey, setNewTagKey] = useState('');
+  const [newTagValue, setNewTagValue] = useState('');
 
   // AI Analysis State
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -580,6 +589,7 @@ const App = () => {
     setLoadingStatus(`Connecting to ${targetRegion}...`);
     setError(null);
     setAiAnalysis(null);
+    setTagFilters([]); // Reset filters on new scan
 
     if (useMock) {
         setTimeout(() => {
@@ -677,6 +687,7 @@ const App = () => {
     setAiAnalysis(null);
     setView('dashboard');
     setSelectedResource(null);
+    setTagFilters([]);
   };
 
   const handleRegionChange = async (newRegion: string) => {
@@ -739,17 +750,60 @@ const App = () => {
     }
   };
 
-  // --- Derived State ---
+  // --- Filter Logic ---
+  
+  const addTagFilter = () => {
+      if (!newTagKey || !newTagValue) return;
+      // Prevent duplicates
+      if (tagFilters.some(f => f.key === newTagKey && f.value === newTagValue)) return;
+      
+      setTagFilters([...tagFilters, { key: newTagKey, value: newTagValue }]);
+      setNewTagKey('');
+      setNewTagValue('');
+  };
+
+  const removeTagFilter = (index: number) => {
+      const newFilters = [...tagFilters];
+      newFilters.splice(index, 1);
+      setTagFilters(newFilters);
+  };
+
+  // Derived State for Filters
+  const uniqueTagKeys = useMemo(() => {
+      const keys = new Set<string>();
+      inventory.forEach(item => {
+          Object.keys(item.tags).forEach(k => keys.add(k));
+      });
+      return Array.from(keys).sort();
+  }, [inventory]);
+
+  const uniqueTagValues = useMemo(() => {
+      if (!newTagKey) return [];
+      const values = new Set<string>();
+      inventory.forEach(item => {
+          if (item.tags[newTagKey]) {
+              values.add(item.tags[newTagKey]);
+          }
+      });
+      return Array.from(values).sort();
+  }, [inventory, newTagKey]);
 
   const filteredInventory = useMemo(() => {
     return inventory.filter(e => {
+      // 1. Text Search
       const matchesSearch = 
         e.resourceId.toLowerCase().includes(searchTerm.toLowerCase()) ||
         e.service.toLowerCase().includes(searchTerm.toLowerCase()) ||
         e.resourceType.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesSearch;
+      
+      // 2. Tag Filter (AND Logic)
+      const matchesTags = tagFilters.every(filter => {
+          return e.tags[filter.key] === filter.value;
+      });
+
+      return matchesSearch && matchesTags;
     });
-  }, [inventory, searchTerm]);
+  }, [inventory, searchTerm, tagFilters]);
 
   const groupedInventory = useMemo(() => {
     const groups: Record<string, InventoryItem[]> = {};
@@ -1069,18 +1123,78 @@ const App = () => {
         </div>
 
         {/* Resource Grouped List */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-4">
-            <h3 className="text-xl font-bold text-[var(--text-main)]">Inventory List</h3>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] w-4 h-4" />
-              <input 
-                type="text" 
-                placeholder="Filter by name, service, or type..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-[var(--bg-card)] border border-[var(--border)] rounded-lg pl-10 pr-4 py-2 text-sm text-[var(--text-main)] focus:ring-1 focus:ring-[var(--accent)] outline-none w-full md:w-80 shadow-sm"
-              />
+        <div className="flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h3 className="text-xl font-bold text-[var(--text-main)]">Inventory List</h3>
+                <div className="flex items-center gap-2 flex-1 md:justify-end">
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] w-4 h-4" />
+                        <input 
+                            type="text" 
+                            placeholder="Filter by name, service, or type..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="bg-[var(--bg-card)] border border-[var(--border)] rounded-lg pl-10 pr-4 py-2 text-sm text-[var(--text-main)] focus:ring-1 focus:ring-[var(--accent)] outline-none w-full shadow-sm"
+                        />
+                    </div>
+                    <Button 
+                        variant={showFilterPanel || tagFilters.length > 0 ? "primary" : "secondary"} 
+                        onClick={() => setShowFilterPanel(!showFilterPanel)}
+                        icon={Filter}
+                        className="px-3"
+                    >
+                        Filters
+                    </Button>
+                </div>
             </div>
+
+            {/* Tag Filter Panel */}
+            {(showFilterPanel || tagFilters.length > 0) && (
+                <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-lg p-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex flex-wrap items-center gap-4 mb-3">
+                         <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-[var(--text-muted)]">Add Filter:</span>
+                            <select 
+                                value={newTagKey} 
+                                onChange={(e) => { setNewTagKey(e.target.value); setNewTagValue(''); }}
+                                className="bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-1.5 text-sm text-[var(--text-main)] outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                            >
+                                <option value="">Select Key...</option>
+                                {uniqueTagKeys.map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                            <select 
+                                value={newTagValue} 
+                                onChange={(e) => setNewTagValue(e.target.value)}
+                                disabled={!newTagKey}
+                                className="bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-1.5 text-sm text-[var(--text-main)] outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-50"
+                            >
+                                <option value="">Select Value...</option>
+                                {uniqueTagValues.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                            <Button size="sm" onClick={addTagFilter} disabled={!newTagKey || !newTagValue} icon={Plus}>
+                                Add
+                            </Button>
+                         </div>
+                    </div>
+                    
+                    {tagFilters.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--border)]">
+                             {tagFilters.map((filter, idx) => (
+                                 <div key={idx} className="flex items-center bg-[var(--bg-hover)] text-[var(--text-main)] text-xs rounded-full px-3 py-1 border border-[var(--border)]">
+                                     <span className="font-bold text-[var(--text-muted)] mr-1">{filter.key}:</span>
+                                     <span className="mr-2 font-mono">{filter.value}</span>
+                                     <button onClick={() => removeTagFilter(idx)} className="hover:text-red-500">
+                                         <X className="w-3 h-3" />
+                                     </button>
+                                 </div>
+                             ))}
+                             <button onClick={() => setTagFilters([])} className="text-xs text-[var(--text-muted)] hover:text-red-500 underline ml-2">
+                                Clear All
+                             </button>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
 
         <div className="space-y-2">
@@ -1095,8 +1209,7 @@ const App = () => {
                </div>
                <h3 className="text-[var(--text-main)] font-medium">No resources found</h3>
                <p className="text-[var(--text-muted)] text-sm mt-1">
-                  We couldn't find any resources using the Resource Groups Tagging API in this region. 
-                  Note: This API only lists supported resource types.
+                  We couldn't find any resources matching your filters.
                </p>
              </div>
           )}
