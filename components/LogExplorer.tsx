@@ -138,8 +138,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                 for(let i=0; i<20; i++) {
                     mockResults.push({
                         '@timestamp': new Date(Date.now() - i*60000).toISOString(),
-                        '@message': `Mock Log Event ${i} - Something happened`,
-                        '@ptr': Math.random().toString(36)
+                        '@message': `Mock Log Event ${i} - Something happened`
                     });
                 }
                 setQueryResults(mockResults);
@@ -187,7 +186,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                     const results = (res.results || []).map(row => {
                         const obj: any = {};
                         row.forEach(item => {
-                            if(item.field) obj[item.field] = item.value;
+                            if(item.field && item.field !== '@ptr') obj[item.field] = item.value;
                         });
                         return obj;
                     });
@@ -516,7 +515,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                                         } catch(e) {}
 
                                         return (
-                                            <div key={i} className="flex gap-3 hover:bg-slate-800/50 p-1 rounded group">
+                                            <div key={i} className="flex gap-3 hover:bg-slate-800/50 p-1 rounded group text-[11px]">
                                                 <span className="text-slate-500 shrink-0 select-none w-36">{new Date(log.timestamp).toISOString().split('T')[1].replace('Z','')}</span>
                                                 <span className={`break-all whitespace-pre-wrap ${isJson ? 'text-green-400' : 'text-slate-300'}`}>
                                                     {content}
@@ -535,7 +534,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                                             <thead>
                                                 <tr>
                                                     {Object.keys(queryResults[0] || {}).map(k => (
-                                                        <th key={k} className="p-2 border-b border-slate-700 text-slate-400 font-semibold bg-slate-800/50 sticky top-0 whitespace-nowrap">{k}</th>
+                                                        <th key={k} className="px-2 py-1.5 border-b border-slate-700 text-slate-400 font-semibold bg-slate-800/50 sticky top-0 whitespace-nowrap text-[11px]">{k}</th>
                                                     ))}
                                                 </tr>
                                             </thead>
@@ -543,7 +542,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                                                 {queryResults.map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-800/30">
                                                         {Object.values(row).map((val, vIdx) => (
-                                                            <td key={vIdx} className="p-2 border-b border-slate-700/50 align-top max-w-xs truncate whitespace-nowrap" title={val}>
+                                                            <td key={vIdx} className="px-2 py-1 border-b border-slate-700/50 align-top max-w-xs truncate whitespace-nowrap text-[11px] font-mono text-slate-300" title={val}>
                                                                 {val}
                                                             </td>
                                                         ))}

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Moon, Sun, Globe,
@@ -19,6 +20,7 @@ import { LogExplorer } from './components/LogExplorer';
 import { CloudWatchLogsView } from './components/CloudWatchLogsView';
 import { BedrockRuntimeList } from './components/Bedrock';
 import { InvestigationView } from './components/InvestigationView';
+import { RegionDiscovery } from './components/RegionDiscovery';
 
 export const App = () => {
   const [credentials, setCredentials] = useState<AwsCredentials | null>(null);
@@ -30,7 +32,7 @@ export const App = () => {
   const [serviceChartType, setServiceChartType] = useState<'pie' | 'bar'>('pie');
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'inventory' | 'bedrock' | 'logs'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'bedrock' | 'logs' | 'discovery'>('inventory');
   const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
   const [selectedLogResource, setSelectedLogResource] = useState<string | null>(null);
@@ -177,8 +179,13 @@ export const App = () => {
 
   const handleRegionChange = async (newRegion: string) => {
       if (!credentials) return;
+      setRegion(newRegion);
       // Use existing credentials but new region
       await fetchResources(credentials, newRegion, credentials.accessKeyId === 'mock');
+      // If switching from discovery, go to inventory to see results
+      if (activeTab === 'discovery') {
+          setActiveTab('inventory');
+      }
   };
 
   const handleInvestigate = (item: InventoryItem) => {
@@ -445,7 +452,7 @@ export const App = () => {
               <Box className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-[var(--text-main)]">AWS Inventory</h1>
+              <h1 className="text-xl font-bold text-[var(--text-main)]">AWS Resource Overseer</h1>
               <div className="flex items-center text-xs text-[var(--text-muted)]">
                 <span className={`w-2 h-2 bg-green-500 rounded-full mr-1.5 ${loading ? 'animate-ping' : 'animate-pulse'}`}></span>
                 {loading ? loadingStatus : `Connected to ${credentials.region}`}
@@ -485,24 +492,30 @@ export const App = () => {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2">
-            <div className="flex space-x-6 border-b border-[var(--border)]">
+            <div className="flex space-x-6 border-b border-[var(--border)] overflow-x-auto">
                 <button 
                     onClick={() => setActiveTab('inventory')}
-                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'inventory' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'inventory' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                 >
                     <Layers className="w-4 h-4"/> Resource Overseer
                 </button>
                 <button 
                      onClick={() => setActiveTab('bedrock')}
-                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'bedrock' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'bedrock' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                 >
                     <Cpu className="w-4 h-4"/> Bedrock Agent Core
                 </button>
                 <button 
                      onClick={() => setActiveTab('logs')}
-                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'logs' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'logs' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                 >
                     <Terminal className="w-4 h-4"/> CloudWatch Logs
+                </button>
+                <button 
+                     onClick={() => setActiveTab('discovery')}
+                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'discovery' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >
+                    <Globe className="w-4 h-4"/> Region Discovery
                 </button>
             </div>
         </div>
@@ -525,6 +538,12 @@ export const App = () => {
                     onViewLogs={handleViewCwLogs} 
                  />
              </div>
+        ) : activeTab === 'discovery' ? (
+            <RegionDiscovery 
+                credentials={credentials} 
+                isMock={credentials.accessKeyId === 'mock'} 
+                onSwitchRegion={handleRegionChange}
+            />
         ) : (
             <>
                 {/* Top Stats */}

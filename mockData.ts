@@ -15,9 +15,12 @@ export const generateMockInventory = (): InventoryItem[] => {
     const service = services[Math.floor(Math.random() * services.length)];
     const randomId = Math.random().toString(36).substr(2, 8);
     let resourceType = 'generic';
-    if (service === 'ec2') resourceType = 'instance';
-    if (service === 's3') resourceType = 'bucket';
-    if (service === 'lambda') resourceType = 'function';
+    
+    if (service === 'ec2') {
+        const ec2Types = ['instance', 'volume', 'security-group', 'snapshot', 'network-interface'];
+        resourceType = ec2Types[Math.floor(Math.random() * ec2Types.length)];
+    } else if (service === 's3') resourceType = 'bucket';
+    else if (service === 'lambda') resourceType = 'function';
     
     items.push({
       arn: `arn:aws:${service}:eu-west-1:123456789012:${resourceType}/${service}-res-${randomId}`,

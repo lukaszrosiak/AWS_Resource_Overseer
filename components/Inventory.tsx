@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Tag, X, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { InventoryItem } from '../types';
 import { useClickOutside } from '../hooks';
@@ -101,6 +101,19 @@ interface ServiceGroupProps {
 export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onInvestigate }) => {
   const [isOpen, setIsOpen] = useState(false);
 
+  const groupedItems = useMemo(() => {
+    if (service !== 'ec2') return null;
+
+    const groups: Record<string, InventoryItem[]> = {};
+    items.forEach(item => {
+        const type = item.resourceType || 'unknown';
+        if (!groups[type]) groups[type] = [];
+        groups[type].push(item);
+    });
+
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [service, items]);
+
   return (
     <Card className="p-0 border-t-4 border-t-[var(--accent)] mb-4 transition-all duration-200">
       <div 
@@ -122,9 +135,25 @@ export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onIn
       </div>
       {isOpen && (
         <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-          {items.map((item, idx) => (
-             <ResourceRow key={idx} item={item} onInvestigate={onInvestigate} />
-          ))}
+           {groupedItems ? (
+             groupedItems.map(([type, groupItems]) => (
+                 <div key={type} className="border-b border-[var(--border)]/30 last:border-0">
+                     <div className="bg-[var(--bg-main)] px-4 py-2 border-y border-[var(--border)]/50 flex items-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]/50 mr-2"></div>
+                        <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            {type} <span className="opacity-50 ml-1">({groupItems.length})</span>
+                        </span>
+                     </div>
+                     {groupItems.map((item, idx) => (
+                        <ResourceRow key={idx} item={item} onInvestigate={onInvestigate} />
+                     ))}
+                 </div>
+             ))
+          ) : (
+             items.map((item, idx) => (
+                <ResourceRow key={idx} item={item} onInvestigate={onInvestigate} />
+             ))
+          )}
         </div>
       )}
     </Card>
