@@ -291,7 +291,7 @@ const ResourceRow = ({ item, onInvestigate }: { item: InventoryItem, onInvestiga
             onClick={() => onInvestigate(item)}
             className="shadow-sm border border-[var(--border)]"
          >
-           Investigate
+           CloudTrail Logs
          </Button>
       </div>
     </div>
