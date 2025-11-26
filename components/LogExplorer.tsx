@@ -535,7 +535,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                                             <thead>
                                                 <tr>
                                                     {Object.keys(queryResults[0] || {}).map(k => (
-                                                        <th key={k} className="p-2 border-b border-slate-700 text-slate-400 font-semibold bg-slate-800/50 sticky top-0">{k}</th>
+                                                        <th key={k} className="p-2 border-b border-slate-700 text-slate-400 font-semibold bg-slate-800/50 sticky top-0 whitespace-nowrap">{k}</th>
                                                     ))}
                                                 </tr>
                                             </thead>
@@ -543,7 +543,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                                                 {queryResults.map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-800/30">
                                                         {Object.values(row).map((val, vIdx) => (
-                                                            <td key={vIdx} className="p-2 border-b border-slate-700/50 align-top max-w-xs truncate" title={val}>
+                                                            <td key={vIdx} className="p-2 border-b border-slate-700/50 align-top max-w-xs truncate whitespace-nowrap" title={val}>
                                                                 {val}
                                                             </td>
                                                         ))}

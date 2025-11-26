@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Moon, Sun, Globe,
@@ -106,7 +105,7 @@ export const App = () => {
             const response: any = await client.send(command);
             if (response.ResourceTagMappingList) {
                 allFetchedResources = [...allFetchedResources, ...response.ResourceTagMappingList];
-                setLoadingStatus(`Found ${allFetchedResources.length} resources...`);
+                setLoadingStatus(`Found ${(allFetchedResources as any[]).length} resources...`);
             }
             paginationToken = response.PaginationToken;
             pageCount++;
