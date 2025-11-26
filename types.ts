@@ -58,3 +58,11 @@ export interface ChatMessage {
 export interface QueryResultRow {
     [key: string]: string;
 }
+
+export interface OrgAccount {
+  Id: string;
+  Arn: string;
+  Email: string;
+  Name: string;
+  Status: string;
+}

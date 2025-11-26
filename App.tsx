@@ -2,15 +2,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Moon, Sun, Globe,
-  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search
+  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
 } from 'recharts';
 import { GoogleGenAI } from "@google/genai";
 import { ResourceGroupsTaggingAPIClient, GetResourcesCommand } from "https://esm.sh/@aws-sdk/client-resource-groups-tagging-api?bundle";
+import { OrganizationsClient, ListAccountsCommand } from "https://esm.sh/@aws-sdk/client-organizations?bundle";
+import { STSClient, AssumeRoleCommand, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts?bundle";
 
-import { AwsCredentials, InventoryItem, TagFilter } from './types';
+import { AwsCredentials, InventoryItem, TagFilter, OrgAccount } from './types';
 import { AWS_REGIONS, COLORS } from './constants';
 import { parseArn, mapTags } from './utils';
 import { generateMockInventory } from './mockData';
@@ -24,6 +26,9 @@ import { RegionDiscovery } from './components/RegionDiscovery';
 
 export const App = () => {
   const [credentials, setCredentials] = useState<AwsCredentials | null>(null);
+  const [originalCredentials, setOriginalCredentials] = useState<AwsCredentials | null>(null);
+  const [currentAccount, setCurrentAccount] = useState<{ id: string, name?: string, arn?: string } | null>(null);
+  
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
@@ -32,7 +37,7 @@ export const App = () => {
   const [serviceChartType, setServiceChartType] = useState<'pie' | 'bar'>('pie');
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'inventory' | 'bedrock' | 'logs' | 'discovery'>('inventory');
+  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery'>('welcome');
   const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
   const [selectedLogResource, setSelectedLogResource] = useState<string | null>(null);
@@ -54,10 +59,60 @@ export const App = () => {
   const [sessionToken, setSessionToken] = useState('');
   const [region, setRegion] = useState('eu-west-1');
 
+  // Org Switcher State
+  const [orgAccounts, setOrgAccounts] = useState<OrgAccount[]>([]);
+  const [targetRoleName, setTargetRoleName] = useState('OrganizationAccountAccessRole');
+  const [targetAccountId, setTargetAccountId] = useState('');
+  const [loadingOrg, setLoadingOrg] = useState(false);
+  const [switchSuccess, setSwitchSuccess] = useState<string | null>(null);
+
   // --- Theme Effect ---
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // --- Identity Effect ---
+  useEffect(() => {
+    const fetchIdentity = async () => {
+        if (!credentials) return;
+
+        // Mock Logic
+        if (credentials.accessKeyId.startsWith('mock')) {
+             if (credentials.accessKeyId.includes('switched') && targetAccountId) {
+                 const match = orgAccounts.find(a => a.Id === targetAccountId);
+                 setCurrentAccount({ id: targetAccountId, name: match?.Name || 'Switched Account' });
+             } else {
+                 setCurrentAccount({ id: '123456789012', name: 'Management Account' });
+             }
+             return;
+        }
+
+        try {
+            const client = new STSClient({
+                region: credentials.region,
+                credentials: {
+                    accessKeyId: credentials.accessKeyId,
+                    secretAccessKey: credentials.secretAccessKey,
+                    sessionToken: credentials.sessionToken || undefined,
+                }
+            });
+            const command = new GetCallerIdentityCommand({});
+            const data = await client.send(command);
+            
+            // Try to resolve name from known org accounts
+            const knownAccount = orgAccounts.find(a => a.Id === data.Account);
+
+            setCurrentAccount({ 
+                id: data.Account || 'Unknown', 
+                name: knownAccount?.Name, 
+                arn: data.Arn 
+            });
+        } catch (err) {
+            console.error("Failed to fetch identity", err);
+        }
+    };
+    fetchIdentity();
+  }, [credentials, orgAccounts]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -160,11 +215,14 @@ export const App = () => {
         region: region
     };
 
+    setOriginalCredentials(creds);
     await fetchResources(creds, region, useMock);
   };
 
   const handleLogout = () => {
     setCredentials(null);
+    setOriginalCredentials(null);
+    setCurrentAccount(null);
     setInventory([]);
     setAccessKeyId('');
     setSecretAccessKey('');
@@ -172,20 +230,143 @@ export const App = () => {
     setError(null);
     setAiAnalysis(null);
     setView('dashboard');
-    setActiveTab('inventory');
+    setActiveTab('welcome'); // Reset to welcome on logout
     setSelectedResource(null);
     setTagFilters([]);
+    setOrgAccounts([]); // Clear org data
+    setSwitchSuccess(null);
   };
 
   const handleRegionChange = async (newRegion: string) => {
       if (!credentials) return;
       setRegion(newRegion);
       // Use existing credentials but new region
-      await fetchResources(credentials, newRegion, credentials.accessKeyId === 'mock');
+      await fetchResources(credentials, newRegion, credentials.accessKeyId.startsWith('mock'));
       // If switching from discovery, go to inventory to see results
       if (activeTab === 'discovery') {
           setActiveTab('inventory');
       }
+  };
+
+  const fetchOrgAccounts = async () => {
+    if (!credentials) return;
+    setLoadingOrg(true);
+    setError(null);
+
+    if (credentials.accessKeyId.startsWith('mock')) {
+        setTimeout(() => {
+            setOrgAccounts([
+                { Id: '123456789012', Name: 'Management Account', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/123456789012', Email: 'admin@example.com' },
+                { Id: '234567890123', Name: 'Production', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/234567890123', Email: 'prod@example.com' },
+                { Id: '345678901234', Name: 'Development', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/345678901234', Email: 'dev@example.com' },
+                { Id: '456789012345', Name: 'Staging', Status: 'SUSPENDED', Arn: 'arn:aws:organizations::123:account/o-123/456789012345', Email: 'staging@example.com' }
+            ]);
+            setLoadingOrg(false);
+        }, 1000);
+        return;
+    }
+
+    try {
+        const client = new OrganizationsClient({
+            region: 'us-east-1', // Org calls are usually global/us-east-1
+            credentials: {
+                accessKeyId: credentials.accessKeyId,
+                secretAccessKey: credentials.secretAccessKey,
+                sessionToken: credentials.sessionToken || undefined,
+            }
+        });
+
+        const command = new ListAccountsCommand({});
+        const response = await client.send(command);
+        
+        const accounts: OrgAccount[] = (response.Accounts || []).map(a => ({
+            Id: a.Id!,
+            Name: a.Name!,
+            Status: a.Status!,
+            Arn: a.Arn!,
+            Email: a.Email!
+        }));
+        
+        setOrgAccounts(accounts);
+    } catch (err: any) {
+        console.error("Org Fetch Error", err);
+        setError("Failed to list organization accounts. Ensure you are using the Management Account or Delegated Administrator.");
+    } finally {
+        setLoadingOrg(false);
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+      if (!targetAccountId || !targetRoleName || !credentials) {
+          setError("Please select an account and enter a role name.");
+          return;
+      }
+      setLoadingOrg(true);
+      setError(null);
+      setSwitchSuccess(null);
+
+      if (credentials.accessKeyId.startsWith('mock')) {
+          setTimeout(() => {
+              // Update mock credentials to simulate switch
+              const switchedCreds = { ...credentials, accessKeyId: `mock-switched-${targetAccountId}` };
+              setCredentials(switchedCreds);
+              setSwitchSuccess(`Successfully assumed role ${targetRoleName} in account ${targetAccountId} (Mock)`);
+              setLoadingOrg(false);
+          }, 1000);
+          return;
+      }
+
+      try {
+          const client = new STSClient({
+              region: credentials.region,
+              credentials: {
+                  accessKeyId: credentials.accessKeyId,
+                  secretAccessKey: credentials.secretAccessKey,
+                  sessionToken: credentials.sessionToken || undefined,
+              }
+          });
+
+          const roleArn = `arn:aws:iam::${targetAccountId}:role/${targetRoleName}`;
+          const command = new AssumeRoleCommand({
+              RoleArn: roleArn,
+              RoleSessionName: 'AWSResourceOverseerSession'
+          });
+
+          const response = await client.send(command);
+          
+          if (!response.Credentials) throw new Error("No credentials returned from AssumeRole");
+
+          const newCreds: AwsCredentials = {
+              accessKeyId: response.Credentials.AccessKeyId!,
+              secretAccessKey: response.Credentials.SecretAccessKey!,
+              sessionToken: response.Credentials.SessionToken!,
+              region: credentials.region
+          };
+
+          // Update main credentials state
+          setCredentials(newCreds);
+          setSwitchSuccess(`Switched to account ${targetAccountId} as ${targetRoleName}`);
+          
+          // Auto-refresh resources for the new account
+          await fetchResources(newCreds, credentials.region, false);
+          
+      } catch (err: any) {
+          console.error("Switch Account Error", err);
+          setError(`Failed to assume role: ${err.message}`);
+      } finally {
+          setLoadingOrg(false);
+      }
+  };
+
+  const handleSwitchBack = async () => {
+      if (!originalCredentials) return;
+      setLoadingOrg(true);
+      setCredentials(originalCredentials);
+      setSwitchSuccess("Switched back to original account.");
+      setError(null);
+      
+      await fetchResources(originalCredentials, originalCredentials.region, originalCredentials.accessKeyId.startsWith('mock'));
+      setLoadingOrg(false);
   };
 
   const handleInvestigate = (item: InventoryItem) => {
@@ -318,6 +499,12 @@ export const App = () => {
       .sort((a, b) => b.count - a.count);
   }, [groupedInventory]);
 
+  // Is assumed role?
+  const isAssumedRole = useMemo(() => {
+      if (!credentials || !originalCredentials) return false;
+      return credentials.accessKeyId !== originalCredentials.accessKeyId;
+  }, [credentials, originalCredentials]);
+
   // --- Render ---
 
   if (!credentials) {
@@ -426,7 +613,7 @@ export const App = () => {
             item={selectedResource} 
             credentials={credentials} 
             onBack={handleBackToDashboard} 
-            isMock={credentials.accessKeyId === 'mock'}
+            isMock={credentials.accessKeyId.startsWith('mock')}
           />
       );
   }
@@ -437,7 +624,7 @@ export const App = () => {
             resourceName={selectedLogResource}
             credentials={credentials}
             onBack={handleBackToDashboard}
-            isMock={credentials.accessKeyId === 'mock'}
+            isMock={credentials.accessKeyId.startsWith('mock')}
           />
       )
   }
@@ -479,6 +666,16 @@ export const App = () => {
                 <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-[var(--text-muted)] pointer-events-none" />
             </div>
 
+            {/* Account Information Display */}
+            {currentAccount && (
+                <div className="hidden lg:flex flex-col items-end mr-2 border-r border-[var(--border)] pr-4 pl-4 border-l">
+                     <span className="text-xs font-bold text-[var(--text-main)] truncate max-w-[150px]" title={currentAccount.name || 'Account'}>
+                         {currentAccount.name || 'Unknown Account'}
+                     </span>
+                     <span className="text-[10px] font-mono text-[var(--text-muted)]">{currentAccount.id}</span>
+                </div>
+            )}
+
             <button 
               onClick={toggleTheme} 
               className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
@@ -493,6 +690,12 @@ export const App = () => {
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2">
             <div className="flex space-x-6 border-b border-[var(--border)] overflow-x-auto">
+                <button 
+                    onClick={() => setActiveTab('welcome')}
+                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'welcome' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >
+                    <Home className="w-4 h-4"/> Welcome
+                </button>
                 <button 
                     onClick={() => setActiveTab('inventory')}
                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'inventory' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
@@ -524,8 +727,177 @@ export const App = () => {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         
-        {activeTab === 'logs' ? (
-             <LogExplorer credentials={credentials} isMock={credentials.accessKeyId === 'mock'} />
+        {activeTab === 'welcome' ? (
+             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                <div className="text-center py-6">
+                    <div className="inline-flex items-center justify-center p-4 bg-[var(--accent)]/10 rounded-full mb-6">
+                        <Shield className="w-12 h-12 text-[var(--accent)]" />
+                    </div>
+                    <h2 className="text-3xl font-bold text-[var(--text-main)] mb-3">Welcome to AWS Resource Overseer</h2>
+                    <p className="text-[var(--text-muted)] max-w-2xl mx-auto text-lg">
+                        Your centralized hub for exploring, monitoring, and auditing your AWS infrastructure.
+                    </p>
+                </div>
+
+                {/* Organization Switcher Panel */}
+                <Card className="max-w-4xl mx-auto border-t-4 border-t-[var(--accent)]">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-[var(--border)] pb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-[var(--bg-hover)] p-2 rounded-lg">
+                                <Users className="w-5 h-5 text-[var(--text-main)]" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-[var(--text-main)]">Organization Switch</h3>
+                                <p className="text-xs text-[var(--text-muted)]">Assume a role in another account within your Organization</p>
+                            </div>
+                        </div>
+                        <div className="mt-3 md:mt-0">
+                            <Button 
+                                size="sm" 
+                                variant="secondary" 
+                                onClick={fetchOrgAccounts} 
+                                disabled={loadingOrg}
+                                className="w-full md:w-auto"
+                            >
+                                {loadingOrg && orgAccounts.length === 0 ? 'Loading...' : 'Load Org Accounts'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {!isAssumedRole ? (
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                            <div className="md:col-span-5">
+                                <label className="block text-xs font-bold text-[var(--text-muted)] mb-1 uppercase">Target Account</label>
+                                <select 
+                                    value={targetAccountId}
+                                    onChange={(e) => setTargetAccountId(e.target.value)}
+                                    className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:ring-1 focus:ring-[var(--accent)] outline-none"
+                                >
+                                    <option value="">Select Account...</option>
+                                    {orgAccounts.map(acc => (
+                                        <option key={acc.Id} value={acc.Id}>
+                                            {acc.Name} ({acc.Id}) - {acc.Status}
+                                        </option>
+                                    ))}
+                                </select>
+                                {orgAccounts.length === 0 && (
+                                    <p className="text-[10px] text-[var(--text-muted)] mt-1 italic">Click "Load Org Accounts" to populate list.</p>
+                                )}
+                            </div>
+                            <div className="md:col-span-4">
+                                <label className="block text-xs font-bold text-[var(--text-muted)] mb-1 uppercase">Role Name</label>
+                                <input 
+                                    type="text" 
+                                    value={targetRoleName}
+                                    onChange={(e) => setTargetRoleName(e.target.value)}
+                                    placeholder="OrganizationAccountAccessRole"
+                                    className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:ring-1 focus:ring-[var(--accent)] outline-none"
+                                />
+                            </div>
+                            <div className="md:col-span-3">
+                                <Button 
+                                    className="w-full" 
+                                    onClick={handleSwitchAccount} 
+                                    disabled={loadingOrg || !targetAccountId}
+                                    icon={ArrowRightLeft}
+                                >
+                                    {loadingOrg ? 'Switching...' : 'Switch Account'}
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                         <div className="flex flex-col items-center justify-center py-4 space-y-4">
+                             <div className="text-center">
+                                 <p className="text-[var(--text-main)] font-medium">Currently managing account:</p>
+                                 <p className="text-xl font-bold text-[var(--accent)]">{currentAccount?.name || currentAccount?.id}</p>
+                                 <p className="text-xs text-[var(--text-muted)] font-mono">{currentAccount?.arn}</p>
+                             </div>
+                             <Button 
+                                onClick={handleSwitchBack}
+                                disabled={loadingOrg}
+                                icon={RotateCcw}
+                                className="bg-[var(--text-main)] hover:bg-[var(--text-muted)] text-[var(--bg-main)]"
+                             >
+                                 {loadingOrg ? 'Reverting...' : 'Switch Back to Original Account'}
+                             </Button>
+                         </div>
+                    )}
+
+                    {error && (
+                         <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg flex items-center text-sm">
+                             <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" />
+                             {error}
+                         </div>
+                    )}
+
+                    {switchSuccess && (
+                        <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 text-green-600 rounded-lg flex items-center text-sm animate-in fade-in">
+                            <CheckCircle2 className="w-4 h-4 mr-2 flex-shrink-0" />
+                            {switchSuccess}
+                        </div>
+                    )}
+                </Card>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('inventory')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                                <Layers className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">Resource Overseer</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    Deep dive into your resource inventory. Visualize distribution by service, check tagging compliance, and generate AI-driven audit reports.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('bedrock')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-purple-500/10 text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors">
+                                <Cpu className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">Bedrock Agent Core</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    Monitor and inspect Bedrock Agent Runtimes. View status, details, and access related CloudWatch logs directly.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('logs')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-orange-500/10 text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                                <Terminal className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">Log Explorer</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    Stream and query CloudWatch Logs in real-time. Use AI assistant to interpret errors and log patterns instantly.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('discovery')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-green-500/10 text-green-500 group-hover:bg-green-500 group-hover:text-white transition-colors">
+                                <Globe className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">Region Discovery</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    Scan across all AWS regions to discover active VPCs and EC2 instances. Identify forgotten resources globally.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            </div>
+        ) : activeTab === 'logs' ? (
+             <LogExplorer credentials={credentials} isMock={credentials.accessKeyId.startsWith('mock')} />
         ) : activeTab === 'bedrock' ? (
              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                  <div>
@@ -534,14 +906,14 @@ export const App = () => {
                  </div>
                  <BedrockRuntimeList 
                     credentials={credentials} 
-                    isMock={credentials.accessKeyId === 'mock'} 
+                    isMock={credentials.accessKeyId.startsWith('mock')} 
                     onViewLogs={handleViewCwLogs} 
                  />
              </div>
         ) : activeTab === 'discovery' ? (
             <RegionDiscovery 
                 credentials={credentials} 
-                isMock={credentials.accessKeyId === 'mock'} 
+                isMock={credentials.accessKeyId.startsWith('mock')} 
                 onSwitchRegion={handleRegionChange}
             />
         ) : (
