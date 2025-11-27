@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Moon, Sun, Globe,
-  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw
+  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -23,6 +23,7 @@ import { CloudWatchLogsView } from './components/CloudWatchLogsView';
 import { BedrockRuntimeList } from './components/Bedrock';
 import { InvestigationView } from './components/InvestigationView';
 import { RegionDiscovery } from './components/RegionDiscovery';
+import { IamRoles } from './components/IamRoles';
 
 export const App = () => {
   const [credentials, setCredentials] = useState<AwsCredentials | null>(null);
@@ -37,7 +38,7 @@ export const App = () => {
   const [serviceChartType, setServiceChartType] = useState<'pie' | 'bar'>('pie');
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery'>('welcome');
+  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam'>('welcome');
   const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
   const [selectedLogResource, setSelectedLogResource] = useState<string | null>(null);
@@ -703,6 +704,12 @@ export const App = () => {
                     <Layers className="w-4 h-4"/> Resource Overseer
                 </button>
                 <button 
+                    onClick={() => setActiveTab('iam')}
+                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'iam' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >
+                    <UserCog className="w-4 h-4"/> IAM Roles
+                </button>
+                <button 
                      onClick={() => setActiveTab('bedrock')}
                      className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'bedrock' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                 >
@@ -838,7 +845,7 @@ export const App = () => {
                     )}
                 </Card>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('inventory')}>
                         <div className="flex items-start gap-4">
                             <div className="p-3 rounded-lg bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors">
@@ -848,6 +855,20 @@ export const App = () => {
                                 <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">Resource Overseer</h3>
                                 <p className="text-[var(--text-muted)] text-sm">
                                     Deep dive into your resource inventory. Visualize distribution by service, check tagging compliance, and generate AI-driven audit reports.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('iam')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-pink-500/10 text-pink-500 group-hover:bg-pink-500 group-hover:text-white transition-colors">
+                                <UserCog className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">IAM Roles</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    Search for IAM roles and filter by trusted entities (principals) to secure your organization.
                                 </p>
                             </div>
                         </div>
@@ -910,6 +931,11 @@ export const App = () => {
                     onViewLogs={handleViewCwLogs} 
                  />
              </div>
+        ) : activeTab === 'iam' ? (
+            <IamRoles 
+                credentials={credentials} 
+                isMock={credentials.accessKeyId.startsWith('mock')} 
+            />
         ) : activeTab === 'discovery' ? (
             <RegionDiscovery 
                 credentials={credentials} 

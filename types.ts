@@ -66,3 +66,12 @@ export interface OrgAccount {
   Name: string;
   Status: string;
 }
+
+export interface IamRole {
+    RoleId: string;
+    RoleName: string;
+    Arn: string;
+    CreateDate: Date;
+    AssumeRolePolicyDocument?: string; 
+    Description?: string;
+}

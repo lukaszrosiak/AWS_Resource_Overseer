@@ -1,5 +1,5 @@
 
-import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent } from './types';
+import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole } from './types';
 
 export const generateMockInventory = (): InventoryItem[] => {
   const services = ['ec2', 's3', 'rds', 'lambda', 'dynamodb', 'vpc', 'elasticloadbalancing'];
@@ -109,3 +109,67 @@ export const generateMockLogs = (count = 20): LogEvent[] => {
     }
     return logs;
 }
+
+export const generateMockIamRoles = (): IamRole[] => {
+    return [
+        {
+            RoleId: 'AROA1234567890EXAMPLE',
+            RoleName: 'OrganizationAccountAccessRole',
+            Arn: 'arn:aws:iam::234567890123:role/OrganizationAccountAccessRole',
+            CreateDate: new Date('2023-01-15'),
+            Description: 'Default role for Org Access',
+            AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [{
+                    Effect: "Allow",
+                    Principal: { "AWS": "arn:aws:iam::123456789012:root" },
+                    Action: "sts:AssumeRole"
+                }]
+            }))
+        },
+        {
+            RoleId: 'AROA9876543210EXAMPLE',
+            RoleName: 'EC2InstanceProfileRole',
+            Arn: 'arn:aws:iam::234567890123:role/EC2InstanceProfileRole',
+            CreateDate: new Date('2023-03-10'),
+            Description: 'Allows EC2 instances to call AWS services',
+            AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [{
+                    Effect: "Allow",
+                    Principal: { "Service": "ec2.amazonaws.com" },
+                    Action: "sts:AssumeRole"
+                }]
+            }))
+        },
+        {
+            RoleId: 'AROA4561237890EXAMPLE',
+            RoleName: 'CrossAccountDeveloperRole',
+            Arn: 'arn:aws:iam::234567890123:role/CrossAccountDeveloperRole',
+            CreateDate: new Date('2023-06-20'),
+            Description: 'Allows dev account to assume',
+            AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [{
+                    Effect: "Allow",
+                    Principal: { "AWS": "arn:aws:iam::999999999999:root" },
+                    Action: "sts:AssumeRole"
+                }]
+            }))
+        },
+        {
+             RoleId: 'AROA7778889990EXAMPLE',
+             RoleName: 'LambdaExecutionRole',
+             Arn: 'arn:aws:iam::234567890123:role/LambdaExecutionRole',
+             CreateDate: new Date('2023-08-05'),
+             AssumeRolePolicyDocument: encodeURIComponent(JSON.stringify({
+                 Version: "2012-10-17",
+                 Statement: [{
+                     Effect: "Allow",
+                     Principal: { "Service": "lambda.amazonaws.com" },
+                     Action: "sts:AssumeRole"
+                 }]
+             }))
+        }
+    ];
+};
