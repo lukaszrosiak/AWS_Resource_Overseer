@@ -13,6 +13,7 @@ interface DependencyGraphProps {
     resource: InventoryItem;
     onBack: () => void;
     isMock: boolean;
+    onNodeSelect?: (node: GraphNode) => void;
 }
 
 const SERVICE_ICONS: Record<string, any> = {
@@ -30,7 +31,7 @@ const SERVICE_ICONS: Record<string, any> = {
     'default': Box
 };
 
-export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBack, isMock }) => {
+export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBack, isMock, onNodeSelect }) => {
     const [nodes, setNodes] = useState<GraphNode[]>([]);
     const [links, setLinks] = useState<GraphLink[]>([]);
     const [loading, setLoading] = useState(true);
@@ -83,14 +84,20 @@ export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBa
     // Basic Dragging Logic
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const svgRef = useRef<SVGSVGElement>(null);
+    const isDragging = useRef(false);
 
     const handleMouseDown = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
         setDraggingId(id);
+        isDragging.current = false;
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!draggingId || !svgRef.current) return;
         
+        // Mark as dragging if movement occurs
+        isDragging.current = true;
+
         const CTM = svgRef.current.getScreenCTM();
         if (!CTM) return;
 
@@ -104,6 +111,16 @@ export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBa
 
     const handleMouseUp = () => {
         setDraggingId(null);
+        // We do NOT reset isDragging here immediately because the onClick needs to check it.
+        // It's reset on next MouseDown.
+    };
+
+    const handleNodeClick = (e: React.MouseEvent, node: GraphNode) => {
+        e.stopPropagation();
+        // If it was a drag operation, do not trigger select
+        if (!isDragging.current && onNodeSelect && node.id !== resource.resourceId) {
+            onNodeSelect(node);
+        }
     };
 
     return (
@@ -189,20 +206,22 @@ export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBa
                                     const isCenter = node.id === resource.resourceId;
                                     const Icon = SERVICE_ICONS[node.type] || SERVICE_ICONS[node.service] || SERVICE_ICONS['default'];
                                     const r = isCenter ? 35 : 25;
-                                    
+                                    const isClickable = !isCenter; // Only dependencies are clickable to navigate
+
                                     return (
                                         <g 
                                             key={node.id} 
                                             transform={`translate(${node.x}, ${node.y})`}
                                             onMouseDown={(e) => handleMouseDown(e, node.id)}
-                                            style={{ cursor: 'grab' }}
+                                            onClick={(e) => handleNodeClick(e, node)}
+                                            style={{ cursor: isClickable ? 'pointer' : 'default' }}
                                         >
                                             <circle 
                                                 r={r} 
                                                 fill={isCenter ? 'var(--accent)' : 'var(--bg-card)'} 
                                                 stroke={isCenter ? 'var(--accent-hover)' : 'var(--border)'}
                                                 strokeWidth="2"
-                                                className="transition-colors shadow-lg"
+                                                className={`transition-all shadow-lg ${isClickable ? 'hover:stroke-[var(--accent)] hover:stroke-2' : ''}`}
                                             />
                                             <foreignObject x={-12} y={-12} width={24} height={24} style={{ pointerEvents: 'none' }}>
                                                 <div className="flex items-center justify-center h-full w-full">
@@ -231,6 +250,9 @@ export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBa
                                             >
                                                 {node.type}
                                             </text>
+                                            {isClickable && (
+                                                <title>Click to visualize dependencies for {node.name}</title>
+                                            )}
                                         </g>
                                     );
                                 })}
@@ -247,7 +269,7 @@ export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBa
                             </div>
                             <div className="flex items-center">
                                 <span className="w-3 h-3 rounded-full bg-[var(--bg-card)] border border-[var(--border)] mr-2"></span>
-                                <span className="text-[var(--text-muted)]">Dependency</span>
+                                <span className="text-[var(--text-muted)]">Dependency (Click to navigate)</span>
                             </div>
                             <div className="flex items-center">
                                 <div className="w-8 h-px bg-[var(--border)] mr-2"></div>

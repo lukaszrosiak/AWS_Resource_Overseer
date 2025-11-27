@@ -12,7 +12,7 @@ import { ResourceGroupsTaggingAPIClient, GetResourcesCommand } from "https://esm
 import { OrganizationsClient, ListAccountsCommand } from "https://esm.sh/@aws-sdk/client-organizations?bundle";
 import { STSClient, AssumeRoleCommand, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts?bundle";
 
-import { AwsCredentials, InventoryItem, TagFilter, OrgAccount } from './types';
+import { AwsCredentials, InventoryItem, TagFilter, OrgAccount, GraphNode } from './types';
 import { AWS_REGIONS, COLORS } from './constants';
 import { parseArn, mapTags } from './utils';
 import { generateMockInventory } from './mockData';
@@ -44,7 +44,7 @@ export const App = () => {
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [theme, setTheme] = useState<string>('light-aws');
+  const [theme, setTheme] = useState<string>('dark-aws');
   const [serviceChartType, setServiceChartType] = useState<'pie' | 'bar'>('pie');
   
   // Navigation State
@@ -390,6 +390,19 @@ export const App = () => {
       setView('graph');
   };
 
+  const handleNodeSelect = (node: GraphNode) => {
+     // Construct a temporary InventoryItem to navigate
+     const newItem: InventoryItem = {
+        resourceId: node.id,
+        resourceType: node.type,
+        service: node.service,
+        // Mocking ARN as it is not present in graph node, usually fine for mock data generation
+        arn: `arn:aws:${node.service}:${region}:123456789012:${node.type}/${node.id}`,
+        tags: {}
+     };
+     setSelectedResource(newItem);
+  };
+
   const handleViewCwLogs = (resourceName: string) => {
       setSelectedLogResource(resourceName);
       setView('cwlogs');
@@ -657,6 +670,7 @@ export const App = () => {
             resource={selectedResource}
             onBack={handleBackToDashboard}
             isMock={credentials.accessKeyId.startsWith('mock')}
+            onNodeSelect={handleNodeSelect}
           />
       )
   }
