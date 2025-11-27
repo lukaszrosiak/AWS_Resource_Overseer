@@ -174,49 +174,105 @@ export const generateMockIamRoles = (): IamRole[] => {
     ];
 };
 
-export const generateMockDependencies = (item: InventoryItem): { nodes: GraphNode[], links: GraphLink[] } => {
+// --- Graph Generation Logic ---
+
+const getMockNeighbors = (sourceId: string, type: string, service: string): { nodes: GraphNode[], links: GraphLink[] } => {
     const nodes: GraphNode[] = [];
     const links: GraphLink[] = [];
-
-    // Central Node (The selected resource)
-    nodes.push({
-        id: item.resourceId,
-        name: item.resourceId,
-        type: item.resourceType,
-        service: item.service
-    });
-
-    const addNode = (name: string, type: string, service: string, relationship: string) => {
-        const id = `${service}-${name}-${Math.random().toString(36).substr(2, 4)}`;
-        nodes.push({ id, name, type, service });
-        links.push({ source: item.resourceId, target: id, relationship });
+    
+    // Helper to add a connection
+    const add = (name: string, targetType: string, targetService: string, rel: string) => {
+        // Create a semi-unique ID based on name to allow re-linking if same name used, but random enough for mocks
+        const id = `${targetService}-${name}-${Math.random().toString(36).substr(2, 4)}`;
+        nodes.push({ id, name, type: targetType, service: targetService });
+        links.push({ source: sourceId, target: id, relationship: rel });
     };
 
-    if (item.service === 'ec2' && item.resourceType === 'instance') {
-        addNode('vpc-prod-main', 'vpc', 'vpc', 'contained_in');
-        addNode('subnet-private-1a', 'subnet', 'vpc', 'contained_in');
-        addNode('sg-web-access', 'security-group', 'ec2', 'attached_to');
-        addNode('vol-system-root', 'volume', 'ec2', 'attached_to');
-        addNode('my-app-role', 'role', 'iam', 'assumes');
-    } else if (item.service === 'lambda') {
-        addNode('lambda-exec-role', 'role', 'iam', 'assumes');
-        addNode('log-group-prod', 'log-group', 'cloudwatch', 'logs_to');
-        addNode('vpc-prod-main', 'vpc', 'vpc', 'connected_to');
-        addNode('event-source-s3', 'bucket', 's3', 'triggered_by');
-    } else if (item.service === 'rds') {
-        addNode('vpc-prod-main', 'vpc', 'vpc', 'contained_in');
-        addNode('subnet-db-1', 'subnet', 'vpc', 'contained_in');
-        addNode('sg-db-access', 'security-group', 'ec2', 'protected_by');
-        addNode('param-group-pg13', 'parameter-group', 'rds', 'configured_by');
-    } else if (item.service === 's3') {
-        addNode('bucket-policy', 'policy', 'iam', 'controlled_by');
-        addNode('access-logging-bucket', 'bucket', 's3', 'logs_to');
-        addNode('kms-key-default', 'key', 'kms', 'encrypted_by');
+    // Define rules based on the source type
+    if (type === 'instance' || (service === 'ec2' && type === 'instance')) {
+        add('vpc-prod-main', 'vpc', 'vpc', 'contained_in');
+        add('subnet-private-1a', 'subnet', 'vpc', 'contained_in');
+        add('sg-web-access', 'security-group', 'ec2', 'attached_to');
+        add('vol-system-root', 'volume', 'ec2', 'attached_to');
+        add('ec2-role', 'role', 'iam', 'assumes');
+    } else if (type === 'vpc') {
+        add('subnet-public-1', 'subnet', 'vpc', 'contains');
+        add('subnet-private-1', 'subnet', 'vpc', 'contains');
+        add('igw-main', 'internet-gateway', 'vpc', 'attached_to');
+        add('rtb-main', 'route-table', 'vpc', 'associated_with');
+    } else if (type === 'subnet') {
+        add('nacl-main', 'nacl', 'vpc', 'associated_with');
+        add('nat-gateway-1', 'nat-gateway', 'vpc', 'routes_to');
+    } else if (type === 'security-group') {
+        add('ingress-rule-80', 'rule', 'ec2', 'permits');
+        add('egress-rule-all', 'rule', 'ec2', 'permits');
+    } else if (type === 'lambda' || type === 'function') {
+        add('lambda-exec-role', 'role', 'iam', 'assumes');
+        add('log-group-prod', 'log-group', 'cloudwatch', 'logs_to');
+        add('vpc-prod-main', 'vpc', 'vpc', 'connected_to');
+        add('trigger-s3', 'bucket', 's3', 'triggered_by');
+    } else if (type === 'bucket') {
+        add('bucket-policy', 'policy', 'iam', 'controlled_by');
+        add('kms-key-s3', 'key', 'kms', 'encrypted_by');
+        add('replication-rule', 'rule', 's3', 'configured_by');
+    } else if (type === 'rds' || type === 'cluster') {
+        add('vpc-prod-main', 'vpc', 'vpc', 'contained_in');
+        add('subnet-db-group', 'subnet-group', 'rds', 'in_group');
+        add('sg-db-access', 'security-group', 'ec2', 'protected_by');
+        add('kms-key-db', 'key', 'kms', 'encrypted_by');
+    } else if (type === 'role') {
+        add('policy-access', 'policy', 'iam', 'attached_to');
+        add('instance-profile', 'instance-profile', 'iam', 'associated_with');
     } else {
-        // Generic defaults for others
-        addNode('vpc-default', 'vpc', 'vpc', 'in_network');
-        addNode('default-sg', 'security-group', 'ec2', 'firewalled_by');
+        // Fallback generic neighbors
+        add('vpc-default', 'vpc', 'vpc', 'in_network');
+        add('default-sg', 'security-group', 'ec2', 'firewalled_by');
     }
 
     return { nodes, links };
+}
+
+export const generateMockDependencies = (rootItem: InventoryItem, depth: number = 1): { nodes: GraphNode[], links: GraphLink[] } => {
+    let allNodes: GraphNode[] = [];
+    let allLinks: GraphLink[] = [];
+    const visitedIds = new Set<string>();
+
+    // 1. Add Root
+    const rootNode: GraphNode = {
+        id: rootItem.resourceId,
+        name: rootItem.resourceId,
+        type: rootItem.resourceType,
+        service: rootItem.service
+    };
+    allNodes.push(rootNode);
+    visitedIds.add(rootNode.id);
+
+    // 2. Traversal
+    // Current frontier of nodes to expand
+    let currentLevelNodes = [rootNode];
+
+    for (let d = 0; d < depth; d++) {
+        const nextLevelNodes: GraphNode[] = [];
+
+        for (const node of currentLevelNodes) {
+            // Get mock neighbors for this node
+            const { nodes: neighbors, links: newLinks } = getMockNeighbors(node.id, node.type, node.service);
+            
+            for (const neighbor of neighbors) {
+                // Since this is mock data with random IDs, collisions are rare but logic should handle them
+                // We typically just add them as new nodes for visualization
+                if (!visitedIds.has(neighbor.id)) {
+                    visitedIds.add(neighbor.id);
+                    allNodes.push(neighbor);
+                    nextLevelNodes.push(neighbor);
+                }
+            }
+            allLinks = [...allLinks, ...newLinks];
+        }
+        
+        // Move to next level
+        currentLevelNodes = nextLevelNodes;
+    }
+
+    return { nodes: allNodes, links: allLinks };
 };
