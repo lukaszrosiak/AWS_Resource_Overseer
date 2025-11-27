@@ -91,3 +91,14 @@ export interface GraphLink {
   target: string;
   relationship: string;
 }
+
+export interface Ec2Instance {
+  InstanceId: string;
+  Name: string;
+  State: string; // running, stopped, etc
+  PrivateIpAddress: string;
+  PublicIpAddress?: string;
+  Platform: string;
+  PingStatus: 'Online' | 'Offline' | 'Unknown'; // SSM Status
+  LaunchTime: Date;
+}

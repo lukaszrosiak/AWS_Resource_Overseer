@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { Tag, X, Search, ChevronDown, ChevronRight, Network, Copy, Check } from 'lucide-react';
+import { Tag, X, Search, ChevronDown, ChevronRight, Network, Copy, Check, ExternalLink } from 'lucide-react';
 import { InventoryItem } from '../types';
 import { useClickOutside } from '../hooks';
 import { Button, Card } from './UI';
+import { getAwsConsoleUrl } from '../utils';
 
 interface ResourceRowProps {
     item: InventoryItem;
@@ -31,6 +32,9 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, o
           setTimeout(() => setCopiedArn(false), 2000);
       }
   };
+
+  const region = item.arn.split(':')[3] || 'eu-west-1'; // Fallback extraction
+  const consoleUrl = getAwsConsoleUrl(region, item.service, item.resourceId, item.resourceType);
 
   return (
     <div className="p-4 hover:bg-[var(--bg-hover)]/30 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border)]/50 last:border-0 theme-transition group">
@@ -105,11 +109,11 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, o
          <Button 
             variant="secondary" 
             size="sm" 
-            icon={copiedArn ? Check : Copy} 
-            onClick={() => handleCopy(item.arn, 'arn')}
+            icon={ExternalLink} 
+            onClick={() => window.open(consoleUrl, '_blank')}
             className="shadow-sm border border-[var(--border)]"
          >
-           {copiedArn ? 'Copied' : 'ARN'}
+           Console
          </Button>
          <Button 
             variant="secondary" 

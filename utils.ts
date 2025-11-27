@@ -137,3 +137,30 @@ export const transpileSqlToInsights = (sql: string): string => {
 
     return pipes.join(' | ');
 };
+
+export const getAwsConsoleUrl = (region: string, service: string, resourceId: string, resourceType: string): string => {
+    const baseUrl = `https://${region}.console.aws.amazon.com`;
+    // Basic mapping logic
+    switch (service) {
+        case 'ec2':
+            if (resourceType === 'instance') return `${baseUrl}/ec2/home?region=${region}#InstanceDetails:instanceId=${resourceId}`;
+            if (resourceType === 'security-group') return `${baseUrl}/ec2/home?region=${region}#SecurityGroup:groupId=${resourceId}`;
+            return `${baseUrl}/ec2/home?region=${region}`;
+        case 's3':
+             return `https://s3.console.aws.amazon.com/s3/buckets/${resourceId}?region=${region}`;
+        case 'lambda':
+             return `${baseUrl}/lambda/home?region=${region}#/functions/${resourceId}`;
+        case 'dynamodb':
+             return `${baseUrl}/dynamodbv2/home?region=${region}#table?name=${resourceId}`;
+        case 'rds':
+             return `${baseUrl}/rds/home?region=${region}#databases`;
+        case 'kms':
+             // Try to extract key id if it's an ARN or path
+             const keyId = resourceId.includes('key/') ? resourceId.split('key/')[1] : resourceId;
+             return `${baseUrl}/kms/home?region=${region}#/kms/keys/${keyId}`;
+        case 'iam':
+             return `https://us-east-1.console.aws.amazon.com/iamv2/home#/roles`;
+        default:
+             return `${baseUrl}/${service}/home?region=${region}`;
+    }
+};

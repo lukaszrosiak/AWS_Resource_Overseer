@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
-  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette, Leaf
+  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette, Leaf, MonitorPlay, Check
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -25,6 +25,7 @@ import { InvestigationView } from './components/InvestigationView';
 import { RegionDiscovery } from './components/RegionDiscovery';
 import { IamRoles } from './components/IamRoles';
 import { DependencyGraph } from './components/DependencyGraph';
+import { SSMConnect } from './components/SSMConnect';
 
 const THEMES = [
   { id: 'default', name: 'Default' },
@@ -49,7 +50,7 @@ export const App = () => {
   const [tagChartType, setTagChartType] = useState<'coverage' | 'environment'>('environment');
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam'>('welcome');
+  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam' | 'ssm'>('welcome');
   const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs' | 'graph'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
   const [resourceHistory, setResourceHistory] = useState<InventoryItem[]>([]);
@@ -75,7 +76,7 @@ export const App = () => {
 
   // Org Switcher State
   const [orgAccounts, setOrgAccounts] = useState<OrgAccount[]>([]);
-  const [targetRoleName, setTargetRoleName] = useState('OrganizationAccountAccessRole');
+  const [targetRoleName, setTargetRoleName] = useState('');
   const [targetAccountId, setTargetAccountId] = useState('');
   const [loadingOrg, setLoadingOrg] = useState(false);
   const [switchSuccess, setSwitchSuccess] = useState<string | null>(null);
@@ -828,6 +829,12 @@ export const App = () => {
                     <UserCog className="w-4 h-4"/> IAM Roles
                 </button>
                 <button 
+                    onClick={() => setActiveTab('ssm')}
+                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'ssm' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >
+                    <MonitorPlay className="w-4 h-4"/> Session Manager
+                </button>
+                <button 
                      onClick={() => setActiveTab('bedrock')}
                      className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'bedrock' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                 >
@@ -876,32 +883,55 @@ export const App = () => {
                                 <p className="text-xs text-[var(--text-muted)]">Assume a role in another account within your Organization</p>
                             </div>
                         </div>
-                        {/* Button Removed: Auto-loading implemented */}
                     </div>
 
                     {!isAssumedRole ? (
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                             <div className="md:col-span-5">
                                 <label className="block text-xs font-bold text-[var(--text-muted)] mb-1 uppercase">Target Account</label>
-                                <select 
-                                    value={targetAccountId}
-                                    onChange={(e) => setTargetAccountId(e.target.value)}
-                                    className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:ring-1 focus:ring-[var(--accent)] outline-none"
-                                >
-                                    <option value="">Select Account...</option>
+                                <div className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg h-[200px] overflow-y-auto custom-scrollbar p-1">
+                                    {groupedAccounts.length === 0 && !loadingOrg ? (
+                                        <div className="text-center text-[var(--text-muted)] text-xs py-8">No accounts found</div>
+                                    ) : null}
                                     {groupedAccounts.map((group) => (
-                                        <optgroup key={group.name} label={group.name}>
-                                            {group.accounts.map(acc => (
-                                                <option key={acc.Id} value={acc.Id}>
-                                                    {acc.Name} ({acc.Id}) - {acc.Status}
-                                                </option>
-                                            ))}
-                                        </optgroup>
+                                        <div key={group.name} className="mb-2">
+                                            <div className="px-2 py-1 text-[10px] font-bold text-[var(--text-muted)] uppercase bg-[var(--bg-main)] sticky top-0 z-10 border-b border-[var(--border)]/50">
+                                                {group.name}
+                                            </div>
+                                            <div className="space-y-0.5 mt-1">
+                                                {group.accounts.map(acc => (
+                                                    <button
+                                                        key={acc.Id}
+                                                        onClick={() => setTargetAccountId(acc.Id)}
+                                                        className={`w-full text-left px-3 py-2 text-xs rounded-md transition-all border ${
+                                                            targetAccountId === acc.Id 
+                                                            ? 'bg-[var(--accent)] border-[var(--accent)] text-white shadow-sm' 
+                                                            : 'bg-transparent border-transparent text-[var(--text-main)] hover:bg-[var(--bg-hover)]'
+                                                        }`}
+                                                    >
+                                                        <div className="flex justify-between items-center w-full">
+                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                                <span className="font-medium truncate">{acc.Name}</span>
+                                                                <span className={`text-[10px] font-mono flex-shrink-0 ${targetAccountId === acc.Id ? 'text-white/70' : 'text-[var(--text-muted)]'}`}>
+                                                                    ({acc.Id})
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                                                <span className={`text-[10px] font-bold ${targetAccountId === acc.Id ? 'text-white/80' : 'text-[var(--text-muted)]'}`}>
+                                                                    {acc.Status}
+                                                                </span>
+                                                                {targetAccountId === acc.Id && <Check className="w-3 h-3" />}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                     ))}
-                                </select>
-                                {loadingOrg && orgAccounts.length === 0 && (
-                                    <p className="text-[10px] text-[var(--text-muted)] mt-1 italic animate-pulse">Loading organization accounts...</p>
-                                )}
+                                    {loadingOrg && orgAccounts.length === 0 && (
+                                        <p className="text-[10px] text-[var(--text-muted)] p-4 text-center italic animate-pulse">Loading organization accounts...</p>
+                                    )}
+                                </div>
                             </div>
                             <div className="md:col-span-4">
                                 <label className="block text-xs font-bold text-[var(--text-muted)] mb-1 uppercase">Role Name</label>
@@ -909,13 +939,13 @@ export const App = () => {
                                     type="text" 
                                     value={targetRoleName}
                                     onChange={(e) => setTargetRoleName(e.target.value)}
-                                    placeholder="OrganizationAccountAccessRole"
+                                    placeholder="e.g. OrganizationAccountAccessRole"
                                     className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:ring-1 focus:ring-[var(--accent)] outline-none"
                                 />
                             </div>
                             <div className="md:col-span-3">
                                 <Button 
-                                    className="w-full" 
+                                    className="w-full h-10" 
                                     onClick={handleSwitchAccount} 
                                     disabled={loadingOrg || !targetAccountId}
                                     icon={ArrowRightLeft}
@@ -986,6 +1016,20 @@ export const App = () => {
                         </div>
                     </Card>
 
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('ssm')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-indigo-500/10 text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                                <MonitorPlay className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">Session Manager</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    Connect to EC2 instances instantly via simulated web terminal using AWS Systems Manager.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
                     <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('bedrock')}>
                         <div className="flex items-start gap-4">
                             <div className="p-3 rounded-lg bg-purple-500/10 text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors">
@@ -1047,6 +1091,11 @@ export const App = () => {
                     onViewLogs={handleViewCwLogs} 
                  />
              </div>
+        ) : activeTab === 'ssm' ? (
+            <SSMConnect 
+                credentials={credentials} 
+                isMock={credentials.accessKeyId.startsWith('mock')} 
+            />
         ) : activeTab === 'iam' ? (
             <IamRoles 
                 credentials={credentials} 

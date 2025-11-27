@@ -10,6 +10,7 @@ import { InventoryItem, GraphNode, GraphLink } from '../types';
 import { generateMockDependencies } from '../mockData';
 import { Button, Card } from './UI';
 import { useClickOutside } from '../hooks';
+import { getAwsConsoleUrl } from '../utils';
 
 interface DependencyGraphProps {
     resource: InventoryItem;
@@ -341,6 +342,9 @@ export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBa
     const ResourceIcon = SERVICE_ICONS[resource.service] || SERVICE_ICONS['default'];
     const hasTags = Object.keys(resource.tags).length > 0;
 
+    const region = resource.arn ? resource.arn.split(':')[3] : 'eu-west-1';
+    const consoleUrl = getAwsConsoleUrl(region, resource.service, resource.resourceId, resource.resourceType);
+
     return (
         <div className="min-h-screen pb-12 theme-transition">
             <div className="bg-[var(--bg-card)] border-b border-[var(--border)] sticky top-0 z-20">
@@ -659,6 +663,17 @@ export const DependencyGraph: React.FC<DependencyGraphProps> = ({ resource, onBa
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                            
+                            <div className="mt-4 pt-3 border-t border-[var(--border)]">
+                                <Button 
+                                    variant="primary" 
+                                    className="w-full text-xs" 
+                                    icon={ExternalLink} 
+                                    onClick={() => window.open(consoleUrl, '_blank')}
+                                >
+                                    Go to Resource (Console)
+                                </Button>
                             </div>
                         </Card>
                     </div>

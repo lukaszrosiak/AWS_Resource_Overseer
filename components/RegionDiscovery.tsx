@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Globe, Play, Loader2, ArrowRight, Server, Cloud, AlertTriangle, CheckCircle2, Workflow } from 'lucide-react';
 import { EC2Client, DescribeVpcsCommand, DescribeInstancesCommand } from "https://esm.sh/@aws-sdk/client-ec2?bundle";
@@ -14,6 +13,14 @@ interface RegionState {
     vpcCount?: number;
     ec2Count?: number;
     pipelineCount?: number;
+    error?: string;
+}
+
+interface ScanResult {
+    code: string;
+    vpcCount: number;
+    ec2Count: number;
+    pipelineCount: number;
     error?: string;
 }
 
@@ -110,7 +117,7 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
             
             try {
                 // Use explicit typing to ensure results are correctly inferred
-                const results: { code: string; vpcCount: number; ec2Count: number; pipelineCount: number; error?: string }[] = await Promise.all(batch.map(async (region) => {
+                const results: ScanResult[] = await Promise.all(batch.map(async (region) => {
                     const result = await scanRegionResources(region.code);
                     return { code: region.code, ...result };
                 }));
@@ -118,7 +125,7 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                 // Update state incrementally
                 setScanResults(prev => {
                     const next = { ...prev };
-                    results.forEach((res) => {
+                    results.forEach((res: ScanResult) => {
                         next[res.code] = {
                             status: (res.vpcCount > 0 || res.ec2Count > 0 || res.pipelineCount > 0) ? 'active' : 'empty',
                             vpcCount: res.vpcCount,

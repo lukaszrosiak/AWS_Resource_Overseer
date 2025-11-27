@@ -1,5 +1,5 @@
 
-import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole, GraphNode, GraphLink } from './types';
+import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole, GraphNode, GraphLink, Ec2Instance } from './types';
 
 export const generateMockInventory = (): InventoryItem[] => {
   const services = ['ec2', 's3', 'rds', 'lambda', 'dynamodb', 'vpc', 'elasticloadbalancing'];
@@ -170,6 +170,57 @@ export const generateMockIamRoles = (): IamRole[] => {
                      Action: "sts:AssumeRole"
                  }]
              }))
+        }
+    ];
+};
+
+export const generateMockInstances = (): Ec2Instance[] => {
+    return [
+        {
+            InstanceId: 'i-0a1b2c3d4e5f6g7h8',
+            Name: 'bastion-prod',
+            State: 'running',
+            PrivateIpAddress: '10.0.1.15',
+            PublicIpAddress: '54.21.12.45',
+            Platform: 'Amazon Linux 2023',
+            PingStatus: 'Online',
+            LaunchTime: new Date(Date.now() - 86400000 * 2)
+        },
+        {
+            InstanceId: 'i-0987654321abcdef0',
+            Name: 'web-server-01',
+            State: 'running',
+            PrivateIpAddress: '10.0.2.100',
+            Platform: 'Ubuntu 22.04',
+            PingStatus: 'Online',
+            LaunchTime: new Date(Date.now() - 3600000 * 4)
+        },
+        {
+            InstanceId: 'i-11223344556677889',
+            Name: 'legacy-app-server',
+            State: 'stopped',
+            PrivateIpAddress: '10.0.1.50',
+            Platform: 'Windows Server 2019',
+            PingStatus: 'Offline',
+            LaunchTime: new Date(Date.now() - 86400000 * 30)
+        },
+        {
+            InstanceId: 'i-aabbccddeeff00112',
+            Name: 'worker-node-alpha',
+            State: 'running',
+            PrivateIpAddress: '10.0.3.12',
+            Platform: 'Amazon Linux 2',
+            PingStatus: 'Online',
+            LaunchTime: new Date(Date.now() - 7200000)
+        },
+        {
+            InstanceId: 'i-554433221100ffee',
+            Name: 'database-standby',
+            State: 'running',
+            PrivateIpAddress: '10.0.4.5',
+            Platform: 'Red Hat Enterprise Linux',
+            PingStatus: 'Unknown', // No SSM agent
+            LaunchTime: new Date(Date.now() - 86400000 * 10)
         }
     ];
 };
