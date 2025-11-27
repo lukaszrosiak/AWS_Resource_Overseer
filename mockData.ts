@@ -1,5 +1,5 @@
 
-import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole } from './types';
+import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole, GraphNode, GraphLink } from './types';
 
 export const generateMockInventory = (): InventoryItem[] => {
   const services = ['ec2', 's3', 'rds', 'lambda', 'dynamodb', 'vpc', 'elasticloadbalancing'];
@@ -172,4 +172,51 @@ export const generateMockIamRoles = (): IamRole[] => {
              }))
         }
     ];
+};
+
+export const generateMockDependencies = (item: InventoryItem): { nodes: GraphNode[], links: GraphLink[] } => {
+    const nodes: GraphNode[] = [];
+    const links: GraphLink[] = [];
+
+    // Central Node (The selected resource)
+    nodes.push({
+        id: item.resourceId,
+        name: item.resourceId,
+        type: item.resourceType,
+        service: item.service
+    });
+
+    const addNode = (name: string, type: string, service: string, relationship: string) => {
+        const id = `${service}-${name}-${Math.random().toString(36).substr(2, 4)}`;
+        nodes.push({ id, name, type, service });
+        links.push({ source: item.resourceId, target: id, relationship });
+    };
+
+    if (item.service === 'ec2' && item.resourceType === 'instance') {
+        addNode('vpc-prod-main', 'vpc', 'vpc', 'contained_in');
+        addNode('subnet-private-1a', 'subnet', 'vpc', 'contained_in');
+        addNode('sg-web-access', 'security-group', 'ec2', 'attached_to');
+        addNode('vol-system-root', 'volume', 'ec2', 'attached_to');
+        addNode('my-app-role', 'role', 'iam', 'assumes');
+    } else if (item.service === 'lambda') {
+        addNode('lambda-exec-role', 'role', 'iam', 'assumes');
+        addNode('log-group-prod', 'log-group', 'cloudwatch', 'logs_to');
+        addNode('vpc-prod-main', 'vpc', 'vpc', 'connected_to');
+        addNode('event-source-s3', 'bucket', 's3', 'triggered_by');
+    } else if (item.service === 'rds') {
+        addNode('vpc-prod-main', 'vpc', 'vpc', 'contained_in');
+        addNode('subnet-db-1', 'subnet', 'vpc', 'contained_in');
+        addNode('sg-db-access', 'security-group', 'ec2', 'protected_by');
+        addNode('param-group-pg13', 'parameter-group', 'rds', 'configured_by');
+    } else if (item.service === 's3') {
+        addNode('bucket-policy', 'policy', 'iam', 'controlled_by');
+        addNode('access-logging-bucket', 'bucket', 's3', 'logs_to');
+        addNode('kms-key-default', 'key', 'kms', 'encrypted_by');
+    } else {
+        // Generic defaults for others
+        addNode('vpc-default', 'vpc', 'vpc', 'in_network');
+        addNode('default-sg', 'security-group', 'ec2', 'firewalled_by');
+    }
+
+    return { nodes, links };
 };

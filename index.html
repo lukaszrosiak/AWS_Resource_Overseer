@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -7,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       :root {
-        /* Light Theme (Default) */
+        /* Default (Light Slate) */
         --bg-main: #f8fafc;       /* slate-50 */
         --bg-card: #ffffff;       /* white */
         --bg-hover: #f1f5f9;      /* slate-100 */
@@ -17,6 +18,19 @@
         --accent: #2563eb;        /* blue-600 */
         --accent-hover: #1d4ed8;  /* blue-700 */
         --popup-bg: #ffffff;      /* white */
+      }
+
+      [data-theme='light'] {
+        /* Explicit Light - Same as root */
+        --bg-main: #f8fafc;
+        --bg-card: #ffffff;
+        --bg-hover: #f1f5f9;
+        --border: #e2e8f0;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        --accent: #2563eb;
+        --accent-hover: #1d4ed8;
+        --popup-bg: #ffffff;
       }
 
       [data-theme='dark'] {
@@ -30,6 +44,45 @@
         --accent: #3b82f6;        /* blue-500 */
         --accent-hover: #2563eb;  /* blue-600 */
         --popup-bg: #020617;      /* slate-950 */
+      }
+
+      [data-theme='tokyonight-storm'] {
+        /* Tokyo Night Storm */
+        --bg-main: #24283b;
+        --bg-card: #1f2335;
+        --bg-hover: #292e42;
+        --border: #414868;
+        --text-main: #c0caf5;
+        --text-muted: #787c99;
+        --accent: #7aa2f7;
+        --accent-hover: #2ac3de;
+        --popup-bg: #1f2335;
+      }
+
+      [data-theme='light-aws'] {
+        /* AWS Light (Console style) */
+        --bg-main: #f2f3f3;
+        --bg-card: #ffffff;
+        --bg-hover: #fafafa;
+        --border: #d5dbdb;
+        --text-main: #16191f;
+        --text-muted: #545b64;
+        --accent: #ec7211;       /* AWS Orange */
+        --accent-hover: #eb5f07;
+        --popup-bg: #ffffff;
+      }
+
+      [data-theme='dark-aws'] {
+        /* AWS Dark (Console style) */
+        --bg-main: #0f1b2a;
+        --bg-card: #161e2d;
+        --bg-hover: #232f3e;
+        --border: #3b4351;
+        --text-main: #d1d5db;
+        --text-muted: #879596;
+        --accent: #ec7211;       /* AWS Orange */
+        --accent-hover: #eb5f07;
+        --popup-bg: #161e2d;
       }
 
       body {

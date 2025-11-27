@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { Tag, X, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { Tag, X, Search, ChevronDown, ChevronRight, Network } from 'lucide-react';
 import { InventoryItem } from '../types';
 import { useClickOutside } from '../hooks';
 import { Button, Card } from './UI';
@@ -8,9 +8,10 @@ import { Button, Card } from './UI';
 interface ResourceRowProps {
     item: InventoryItem;
     onInvestigate: (item: InventoryItem) => void;
+    onVisualize: (item: InventoryItem) => void;
 }
 
-export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate }) => {
+export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, onVisualize }) => {
   const [showTags, setShowTags] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const hasTags = Object.keys(item.tags).length > 0;
@@ -77,7 +78,16 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate })
             <span className="hidden md:inline text-[10px] truncate max-w-[200px] opacity-70">{item.arn}</span>
         </div>
       </div>
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+         <Button 
+            variant="secondary" 
+            size="sm" 
+            icon={Network} 
+            onClick={() => onVisualize(item)}
+            className="shadow-sm border border-[var(--border)]"
+         >
+           Graph
+         </Button>
          <Button 
             variant="secondary" 
             size="sm" 
@@ -85,7 +95,7 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate })
             onClick={() => onInvestigate(item)}
             className="shadow-sm border border-[var(--border)]"
          >
-           CloudTrail Logs
+           Logs
          </Button>
       </div>
     </div>
@@ -96,9 +106,10 @@ interface ServiceGroupProps {
     service: string;
     items: InventoryItem[];
     onInvestigate: (item: InventoryItem) => void;
+    onVisualize: (item: InventoryItem) => void;
 }
 
-export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onInvestigate }) => {
+export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onInvestigate, onVisualize }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const groupedItems = useMemo(() => {
@@ -145,13 +156,13 @@ export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onIn
                         </span>
                      </div>
                      {groupItems.map((item, idx) => (
-                        <ResourceRow key={idx} item={item} onInvestigate={onInvestigate} />
+                        <ResourceRow key={idx} item={item} onInvestigate={onInvestigate} onVisualize={onVisualize} />
                      ))}
                  </div>
              ))
           ) : (
              items.map((item, idx) => (
-                <ResourceRow key={idx} item={item} onInvestigate={onInvestigate} />
+                <ResourceRow key={idx} item={item} onInvestigate={onInvestigate} onVisualize={onVisualize} />
              ))
           )}
         </div>

@@ -357,10 +357,10 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
             </Card>
 
             {/* Main Content Area: Logs + Optional AI Panel */}
-            <div className="flex-1 flex gap-4 overflow-hidden">
+            <div className="flex-1 flex flex-col gap-4 overflow-hidden">
                 
                 {/* Log Viewer Column */}
-                <Card className={`p-4 flex flex-col flex-1 overflow-hidden transition-all duration-300 ${showAiPanel ? 'w-2/3' : 'w-full'}`}>
+                <Card className="p-4 flex flex-col flex-1 overflow-hidden transition-all duration-300 w-full">
                     
                     {/* Header Controls */}
                     <div className="flex flex-col gap-4 mb-4 pb-4 border-b border-[var(--border)]">
@@ -559,7 +559,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
 
                 {/* AI Chat Panel */}
                 {showAiPanel && (
-                    <Card className="w-1/3 flex flex-col p-0 border-l border-[var(--border)] rounded-xl overflow-hidden animate-in slide-in-from-right-4">
+                    <Card className="h-80 w-full flex flex-col p-0 rounded-xl overflow-hidden animate-in slide-in-from-bottom-4 shadow-lg">
                         <div className="p-3 bg-[var(--bg-hover)] border-b border-[var(--border)] flex justify-between items-center">
                             <h4 className="font-bold text-[var(--text-main)] flex items-center text-sm">
                                 <Bot className="w-4 h-4 mr-2 text-[var(--accent)]" /> 
@@ -574,7 +574,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
                             {aiMessages.length === 0 && (
                                 <div className="text-center text-[var(--text-muted)] text-xs mt-10">
                                     <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                                    <p>Ask me about the logs shown on the left.</p>
+                                    <p>Ask me about the logs shown above.</p>
                                     <p className="mt-2 opacity-70">"Why did the request fail?"</p>
                                     <p className="opacity-70">"Count the errors."</p>
                                 </div>

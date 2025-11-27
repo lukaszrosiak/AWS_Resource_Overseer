@@ -75,3 +75,18 @@ export interface IamRole {
     AssumeRolePolicyDocument?: string; 
     Description?: string;
 }
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: string;
+  service: string;
+  x?: number;
+  y?: number;
+}
+
+export interface GraphLink {
+  source: string;
+  target: string;
+  relationship: string;
+}

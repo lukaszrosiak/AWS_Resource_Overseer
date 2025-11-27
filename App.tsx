@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Moon, Sun, Globe,
-  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog
+  Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
+  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -24,6 +24,16 @@ import { BedrockRuntimeList } from './components/Bedrock';
 import { InvestigationView } from './components/InvestigationView';
 import { RegionDiscovery } from './components/RegionDiscovery';
 import { IamRoles } from './components/IamRoles';
+import { DependencyGraph } from './components/DependencyGraph';
+
+const THEMES = [
+  { id: 'default', name: 'Default' },
+  { id: 'light', name: 'Light' },
+  { id: 'dark', name: 'Dark' },
+  { id: 'tokyonight-storm', name: 'Tokyonight Storm' },
+  { id: 'light-aws', name: 'Light AWS' },
+  { id: 'dark-aws', name: 'Dark AWS' },
+];
 
 export const App = () => {
   const [credentials, setCredentials] = useState<AwsCredentials | null>(null);
@@ -34,12 +44,12 @@ export const App = () => {
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<string>('light-aws');
   const [serviceChartType, setServiceChartType] = useState<'pie' | 'bar'>('pie');
   
   // Navigation State
   const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam'>('welcome');
-  const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs' | 'graph'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
   const [selectedLogResource, setSelectedLogResource] = useState<string | null>(null);
 
@@ -69,7 +79,11 @@ export const App = () => {
 
   // --- Theme Effect ---
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'default') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
   }, [theme]);
 
   // --- Identity Effect ---
@@ -114,10 +128,6 @@ export const App = () => {
     };
     fetchIdentity();
   }, [credentials, orgAccounts]);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
 
   // --- Logic ---
 
@@ -375,6 +385,11 @@ export const App = () => {
       setView('investigate');
   };
 
+  const handleVisualize = (item: InventoryItem) => {
+      setSelectedResource(item);
+      setView('graph');
+  };
+
   const handleViewCwLogs = (resourceName: string) => {
       setSelectedLogResource(resourceName);
       setView('cwlogs');
@@ -511,12 +526,18 @@ export const App = () => {
   if (!credentials) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 theme-transition">
-         <button 
-            onClick={toggleTheme} 
-            className="absolute top-4 right-4 p-2 rounded-full bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors border border-[var(--border)]"
-          >
-            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+        <div className="absolute top-4 right-4 flex items-center bg-[var(--bg-card)] border border-[var(--border)] rounded-lg p-1 shadow-sm">
+             <Palette className="w-4 h-4 ml-2 mr-1 text-[var(--text-muted)]" />
+             <select 
+                value={theme}
+                onChange={(e) => setTheme(e.target.value)}
+                className="bg-transparent text-sm text-[var(--text-main)] outline-none border-none cursor-pointer py-1 pr-1"
+             >
+                {THEMES.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+             </select>
+        </div>
 
         <div className="max-w-md w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-8 shadow-2xl">
           <div className="flex items-center justify-center mb-8">
@@ -630,6 +651,16 @@ export const App = () => {
       )
   }
 
+  if (view === 'graph' && selectedResource) {
+      return (
+          <DependencyGraph
+            resource={selectedResource}
+            onBack={handleBackToDashboard}
+            isMock={credentials.accessKeyId.startsWith('mock')}
+          />
+      )
+  }
+
   return (
     <div className="min-h-screen pb-12 theme-transition">
       {/* Header */}
@@ -677,12 +708,20 @@ export const App = () => {
                 </div>
             )}
 
-            <button 
-              onClick={toggleTheme} 
-              className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-            >
-              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            {/* Theme Selector Dropdown */}
+            <div className="flex items-center bg-[var(--bg-hover)] rounded-lg px-2 py-1 border border-[var(--border)]">
+                <Palette className="w-4 h-4 mr-2 text-[var(--text-muted)]" />
+                <select 
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                    className="bg-transparent text-sm text-[var(--text-main)] outline-none border-none cursor-pointer max-w-[100px] truncate"
+                >
+                    {THEMES.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                </select>
+            </div>
+
             <div className="h-6 w-px bg-[var(--border)]"></div>
             <Button variant="ghost" icon={LogOut} onClick={handleLogout}>Disconnect</Button>
           </div>
@@ -1202,6 +1241,7 @@ export const App = () => {
                     service={stat.name} 
                     items={groupedInventory[stat.name]} 
                     onInvestigate={handleInvestigate}
+                    onVisualize={handleVisualize}
                     />
                 ))}
                 

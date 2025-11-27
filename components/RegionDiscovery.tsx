@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Globe, Play, Loader2, ArrowRight, Server, Cloud, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Globe, Play, Loader2, ArrowRight, Server, Cloud, AlertTriangle, CheckCircle2, Workflow } from 'lucide-react';
 import { EC2Client, DescribeVpcsCommand, DescribeInstancesCommand } from "https://esm.sh/@aws-sdk/client-ec2?bundle";
+import { CodePipelineClient, ListPipelinesCommand } from "https://esm.sh/@aws-sdk/client-codepipeline?bundle";
 import { AwsCredentials } from '../types';
 import { AWS_REGIONS } from '../constants';
 import { Button, Card } from './UI';
@@ -12,6 +13,7 @@ interface RegionState {
     status: RegionStatus;
     vpcCount?: number;
     ec2Count?: number;
+    pipelineCount?: number;
     error?: string;
 }
 
@@ -25,17 +27,18 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
     const [scanResults, setScanResults] = useState<Record<string, RegionState>>({});
     const [scanningGroups, setScanningGroups] = useState<Record<string, boolean>>({});
 
-    const scanRegionResources = async (regionCode: string): Promise<{ vpcCount: number, ec2Count: number, error?: string }> => {
+    const scanRegionResources = async (regionCode: string): Promise<{ vpcCount: number, ec2Count: number, pipelineCount: number, error?: string }> => {
         if (isMock) {
             await new Promise(r => setTimeout(r, 200 + Math.random() * 500));
             // Random mock data
             const vpcCount = Math.random() > 0.6 ? Math.floor(Math.random() * 3) + 1 : 0;
             const ec2Count = vpcCount > 0 ? Math.floor(Math.random() * 10) : 0;
-            return { vpcCount, ec2Count };
+            const pipelineCount = vpcCount > 0 ? Math.floor(Math.random() * 5) : 0;
+            return { vpcCount, ec2Count, pipelineCount };
         }
 
         try {
-            const client = new EC2Client({
+            const ec2Client = new EC2Client({
                 region: regionCode,
                 credentials: {
                     accessKeyId: credentials.accessKeyId,
@@ -44,33 +47,47 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                 },
                 maxAttempts: 2, // Fail fast on connection issues
             });
+
+            const cpClient = new CodePipelineClient({
+                region: regionCode,
+                credentials: {
+                    accessKeyId: credentials.accessKeyId,
+                    secretAccessKey: credentials.secretAccessKey,
+                    sessionToken: credentials.sessionToken || undefined,
+                },
+                maxAttempts: 2,
+            });
             
             // Wrap AWS calls in a timeout promise to prevent hanging on opt-in regions
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Timeout")), 5000)
+                setTimeout(() => reject(new Error("Timeout")), 8000)
             );
 
+            // Execute in parallel but handle failures gracefully for services that might not exist in a region
             const apiPromise = Promise.all([
-                client.send(new DescribeVpcsCommand({})),
-                client.send(new DescribeInstancesCommand({ MaxResults: 1000 }))
+                ec2Client.send(new DescribeVpcsCommand({})),
+                ec2Client.send(new DescribeInstancesCommand({ MaxResults: 1000 })),
+                cpClient.send(new ListPipelinesCommand({})).catch(() => ({ pipelines: [] })) // Catch CP errors as it might not be available
             ]);
 
             // @ts-ignore
-            const [vpcRes, ec2Res] = await Promise.race([apiPromise, timeoutPromise]);
+            const [vpcRes, ec2Res, cpRes] = await Promise.race([apiPromise, timeoutPromise]);
 
             const vpcCount = (vpcRes.Vpcs || []).length;
             
             let ec2Count = 0;
-            (ec2Res.Reservations || []).forEach(res => {
+            (ec2Res.Reservations || []).forEach((res: any) => {
                 ec2Count += (res.Instances || []).length;
             });
+
+            const pipelineCount = (cpRes.pipelines || []).length;
             
-            return { vpcCount, ec2Count };
+            return { vpcCount, ec2Count, pipelineCount };
         } catch (e: any) {
             console.warn(`Scan failed for ${regionCode}:`, e);
             // Distinguish between access denied (auth) and timeouts/network (connectivity)
             const errorMsg = e.message === 'Timeout' ? 'Timeout' : 'Access Error';
-            return { vpcCount: 0, ec2Count: 0, error: errorMsg };
+            return { vpcCount: 0, ec2Count: 0, pipelineCount: 0, error: errorMsg };
         }
     };
 
@@ -102,9 +119,10 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                     const next = { ...prev };
                     results.forEach(res => {
                         next[res.code] = {
-                            status: (res.vpcCount > 0 || res.ec2Count > 0) ? 'active' : 'empty',
+                            status: (res.vpcCount > 0 || res.ec2Count > 0 || res.pipelineCount > 0) ? 'active' : 'empty',
                             vpcCount: res.vpcCount,
                             ec2Count: res.ec2Count,
+                            pipelineCount: res.pipelineCount,
                             error: res.error
                         };
                     });
@@ -119,9 +137,10 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
     };
 
     // Calculate totals
-    const regionsWithResources = Object.values(scanResults).filter(s => (s.vpcCount || 0) > 0 || (s.ec2Count || 0) > 0).length;
+    const regionsWithResources = Object.values(scanResults).filter(s => (s.vpcCount || 0) > 0 || (s.ec2Count || 0) > 0 || (s.pipelineCount || 0) > 0).length;
     const totalVpcs = Object.values(scanResults).reduce((acc, curr) => acc + (curr.vpcCount || 0), 0);
     const totalEc2 = Object.values(scanResults).reduce((acc, curr) => acc + (curr.ec2Count || 0), 0);
+    const totalPipelines = Object.values(scanResults).reduce((acc, curr) => acc + (curr.pipelineCount || 0), 0);
 
     // Grouping Logic
     const getRegionGroup = (code: string) => {
@@ -150,13 +169,13 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                         Region Discovery
                     </h2>
                     <p className="text-[var(--text-muted)] mt-1">
-                        Scan for active VPCs and EC2 Instances across all AWS regions.
+                        Scan for active VPCs, EC2 Instances, and CodePipelines across all AWS regions.
                     </p>
                 </div>
             </div>
 
             {regionsWithResources > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                     <Card className="p-4 flex flex-col justify-center bg-blue-500/5 border-blue-500/20">
                         <span className="text-[var(--text-muted)] text-xs font-bold uppercase">Active Regions</span>
                         <span className="text-2xl font-bold text-blue-500">{regionsWithResources}</span>
@@ -168,6 +187,10 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                     <Card className="p-4 flex flex-col justify-center">
                          <span className="text-[var(--text-muted)] text-xs font-bold uppercase">Total EC2 Instances</span>
                          <span className="text-2xl font-bold text-[var(--text-main)]">{totalEc2}</span>
+                    </Card>
+                    <Card className="p-4 flex flex-col justify-center">
+                         <span className="text-[var(--text-muted)] text-xs font-bold uppercase">Total Pipelines</span>
+                         <span className="text-2xl font-bold text-[var(--text-main)]">{totalPipelines}</span>
                     </Card>
                 </div>
             )}
@@ -207,12 +230,14 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                                     const isEmpty = state.status === 'empty';
                                     const hasVpc = (state.vpcCount || 0) > 0;
                                     const hasEc2 = (state.ec2Count || 0) > 0;
+                                    const hasPipe = (state.pipelineCount || 0) > 0;
                                     const isScanning = state.status === 'scanning';
                                     const isIdle = state.status === 'idle';
 
                                     // Render logic for count: Show 0 explicitly if scanned
                                     const displayVpc = isIdle || isScanning ? '-' : (state.vpcCount || 0);
                                     const displayEc2 = isIdle || isScanning ? '-' : (state.ec2Count || 0);
+                                    const displayPipe = isIdle || isScanning ? '-' : (state.pipelineCount || 0);
                                     
                                     return (
                                         <Card 
@@ -263,6 +288,17 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                                                     </div>
                                                     <span className={`font-mono font-bold ${hasEc2 ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>
                                                         {displayEc2}
+                                                    </span>
+                                                </div>
+
+                                                {/* CodePipeline Count */}
+                                                <div className={`flex items-center justify-between text-xs p-2 rounded transition-colors ${hasPipe ? 'bg-[var(--bg-card)] border border-[var(--border)] shadow-sm' : 'bg-[var(--bg-hover)]/30 text-[var(--text-muted)]'}`}>
+                                                    <div className="flex items-center space-x-2">
+                                                        <Workflow className={`w-3.5 h-3.5 ${hasPipe ? 'text-purple-500' : 'text-[var(--text-muted)] opacity-50'}`} />
+                                                        <span>Pipelines</span>
+                                                    </div>
+                                                    <span className={`font-mono font-bold ${hasPipe ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>
+                                                        {displayPipe}
                                                     </span>
                                                 </div>
                                             </div>
