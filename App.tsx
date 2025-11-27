@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
@@ -59,6 +60,7 @@ export const App = () => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [newTagKey, setNewTagKey] = useState('');
   const [newTagValue, setNewTagValue] = useState('');
+  const [logExplorerFilter, setLogExplorerFilter] = useState('');
 
   // AI Analysis State
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -246,6 +248,7 @@ export const App = () => {
     setTagFilters([]);
     setOrgAccounts([]); // Clear org data
     setSwitchSuccess(null);
+    setLogExplorerFilter('');
   };
 
   const handleRegionChange = async (newRegion: string) => {
@@ -267,10 +270,10 @@ export const App = () => {
     if (credentials.accessKeyId.startsWith('mock')) {
         setTimeout(() => {
             setOrgAccounts([
-                { Id: '123456789012', Name: 'Management Account', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/123456789012', Email: 'admin@example.com' },
-                { Id: '234567890123', Name: 'Production', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/234567890123', Email: 'prod@example.com' },
-                { Id: '345678901234', Name: 'Development', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/345678901234', Email: 'dev@example.com' },
-                { Id: '456789012345', Name: 'Staging', Status: 'SUSPENDED', Arn: 'arn:aws:organizations::123:account/o-123/456789012345', Email: 'staging@example.com' }
+                { Id: '123456789012', Name: 'Management Account', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/123456789012', Email: 'admin@example.com', OU: 'Root' },
+                { Id: '234567890123', Name: 'Production', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/234567890123', Email: 'prod@example.com', OU: 'Workloads' },
+                { Id: '345678901234', Name: 'Development', Status: 'ACTIVE', Arn: 'arn:aws:organizations::123:account/o-123/345678901234', Email: 'dev@example.com', OU: 'Workloads' },
+                { Id: '456789012345', Name: 'Staging', Status: 'SUSPENDED', Arn: 'arn:aws:organizations::123:account/o-123/456789012345', Email: 'staging@example.com', OU: 'Sandbox' }
             ]);
             setLoadingOrg(false);
         }, 1000);
@@ -295,7 +298,8 @@ export const App = () => {
             Name: a.Name!,
             Status: a.Status!,
             Arn: a.Arn!,
-            Email: a.Email!
+            Email: a.Email!,
+            OU: 'Organization' // Default group since we can't easily fetch OU structure
         }));
         
         setOrgAccounts(accounts);
@@ -306,6 +310,13 @@ export const App = () => {
         setLoadingOrg(false);
     }
   };
+
+  // Auto-load accounts when on Welcome tab
+  useEffect(() => {
+    if (activeTab === 'welcome' && credentials && orgAccounts.length === 0 && !loadingOrg && !isAssumedRole) {
+        fetchOrgAccounts();
+    }
+  }, [activeTab, credentials]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSwitchAccount = async () => {
       if (!targetAccountId || !targetRoleName || !credentials) {
@@ -417,8 +428,10 @@ export const App = () => {
   };
 
   const handleViewCwLogs = (resourceName: string) => {
-      setSelectedLogResource(resourceName);
-      setView('cwlogs');
+      setLogExplorerFilter(resourceName);
+      setActiveTab('logs');
+      setView('dashboard');
+      setSelectedLogResource(null);
   };
 
   const handleBackToDashboard = () => {
@@ -547,6 +560,27 @@ export const App = () => {
       if (!credentials || !originalCredentials) return false;
       return credentials.accessKeyId !== originalCredentials.accessKeyId;
   }, [credentials, originalCredentials]);
+
+  // Group accounts by OU
+  const groupedAccounts = useMemo(() => {
+      const groups: Record<string, OrgAccount[]> = {};
+      orgAccounts.forEach(acc => {
+          const key = acc.OU || 'Organization';
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(acc);
+      });
+      
+      const sortedKeys = Object.keys(groups).sort((a, b) => {
+          if (a === 'Root') return -1;
+          if (b === 'Root') return 1;
+          return a.localeCompare(b);
+      });
+
+      return sortedKeys.map(key => ({
+          name: key,
+          accounts: groups[key].sort((a, b) => a.Name.localeCompare(b.Name))
+      }));
+  }, [orgAccounts]);
 
   // --- Render ---
 
@@ -827,17 +861,7 @@ export const App = () => {
                                 <p className="text-xs text-[var(--text-muted)]">Assume a role in another account within your Organization</p>
                             </div>
                         </div>
-                        <div className="mt-3 md:mt-0">
-                            <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                onClick={fetchOrgAccounts} 
-                                disabled={loadingOrg}
-                                className="w-full md:w-auto"
-                            >
-                                {loadingOrg && orgAccounts.length === 0 ? 'Loading...' : 'Load Org Accounts'}
-                            </Button>
-                        </div>
+                        {/* Button Removed: Auto-loading implemented */}
                     </div>
 
                     {!isAssumedRole ? (
@@ -850,14 +874,18 @@ export const App = () => {
                                     className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:ring-1 focus:ring-[var(--accent)] outline-none"
                                 >
                                     <option value="">Select Account...</option>
-                                    {orgAccounts.map(acc => (
-                                        <option key={acc.Id} value={acc.Id}>
-                                            {acc.Name} ({acc.Id}) - {acc.Status}
-                                        </option>
+                                    {groupedAccounts.map((group) => (
+                                        <optgroup key={group.name} label={group.name}>
+                                            {group.accounts.map(acc => (
+                                                <option key={acc.Id} value={acc.Id}>
+                                                    {acc.Name} ({acc.Id}) - {acc.Status}
+                                                </option>
+                                            ))}
+                                        </optgroup>
                                     ))}
                                 </select>
-                                {orgAccounts.length === 0 && (
-                                    <p className="text-[10px] text-[var(--text-muted)] mt-1 italic">Click "Load Org Accounts" to populate list.</p>
+                                {loadingOrg && orgAccounts.length === 0 && (
+                                    <p className="text-[10px] text-[var(--text-muted)] mt-1 italic animate-pulse">Loading organization accounts...</p>
                                 )}
                             </div>
                             <div className="md:col-span-4">
@@ -987,7 +1015,11 @@ export const App = () => {
                 </div>
             </div>
         ) : activeTab === 'logs' ? (
-             <LogExplorer credentials={credentials} isMock={credentials.accessKeyId.startsWith('mock')} />
+             <LogExplorer 
+                credentials={credentials} 
+                isMock={credentials.accessKeyId.startsWith('mock')} 
+                initialFilter={logExplorerFilter}
+             />
         ) : activeTab === 'bedrock' ? (
              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                  <div>
@@ -1095,7 +1127,7 @@ export const App = () => {
                     </button>
                     </div>
                     <div className="prose prose-invert prose-sm max-w-none text-[var(--text-muted)]">
-                    {aiAnalysis.split('\n').map((line, i) => (
+                    {(aiAnalysis as string).split('\n').map((line, i) => (
                         <p key={i} className="mb-1">{line}</p>
                     ))}
                     </div>

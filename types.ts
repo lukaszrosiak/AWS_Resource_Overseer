@@ -65,6 +65,7 @@ export interface OrgAccount {
   Email: string;
   Name: string;
   Status: string;
+  OU?: string;
 }
 
 export interface IamRole {

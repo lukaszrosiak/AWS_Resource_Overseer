@@ -116,7 +116,7 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                 // Update state incrementally
                 setScanResults(prev => {
                     const next = { ...prev };
-                    results.forEach((res: any) => {
+                    results.forEach((res: { code: string; vpcCount: number; ec2Count: number; pipelineCount: number; error?: string }) => {
                         next[res.code] = {
                             status: (res.vpcCount > 0 || res.ec2Count > 0 || res.pipelineCount > 0) ? 'active' : 'empty',
                             vpcCount: res.vpcCount,

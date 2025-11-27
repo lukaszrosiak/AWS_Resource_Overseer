@@ -8,7 +8,7 @@ import { generateMockLogGroups, generateMockLogs } from '../mockData';
 import { transpileSqlToInsights } from '../utils';
 import { Button, Card } from './UI';
 
-export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentials, isMock: boolean }) => {
+export const LogExplorer = ({ credentials, isMock, initialFilter }: { credentials: AwsCredentials, isMock: boolean, initialFilter?: string }) => {
     const [groups, setGroups] = useState<string[]>([]);
     const [filteredGroups, setFilteredGroups] = useState<string[]>([]);
     const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -18,7 +18,7 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
     
     // UI State
     const [mode, setMode] = useState<'stream' | 'query'>('stream');
-    const [searchGroupTerm, setSearchGroupTerm] = useState('');
+    const [searchGroupTerm, setSearchGroupTerm] = useState(initialFilter || '');
     const [filterPattern, setFilterPattern] = useState('');
     const [sqlQuery, setSqlQuery] = useState('');
     const [loadingGroups, setLoadingGroups] = useState(false);
@@ -46,6 +46,13 @@ export const LogExplorer = ({ credentials, isMock }: { credentials: AwsCredentia
         setCustomStart(fmt(oneHourAgo));
         setCustomEnd(fmt(now));
     }, []);
+
+    // Sync initial filter
+    useEffect(() => {
+        if (initialFilter) {
+            setSearchGroupTerm(initialFilter);
+        }
+    }, [initialFilter]);
 
     // Set Default SQL Query when group changes
     useEffect(() => {
