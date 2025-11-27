@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { Tag, X, Search, ChevronDown, ChevronRight, Network } from 'lucide-react';
+import { Tag, X, Search, ChevronDown, ChevronRight, Network, Copy, Check } from 'lucide-react';
 import { InventoryItem } from '../types';
 import { useClickOutside } from '../hooks';
 import { Button, Card } from './UI';
@@ -13,10 +13,24 @@ interface ResourceRowProps {
 
 export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, onVisualize }) => {
   const [showTags, setShowTags] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+  const [copiedArn, setCopiedArn] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const hasTags = Object.keys(item.tags).length > 0;
 
   useClickOutside(popupRef, () => setShowTags(false));
+
+  const handleCopy = (text: string, type: 'id' | 'arn') => {
+      if (!text) return;
+      navigator.clipboard.writeText(text);
+      if (type === 'id') {
+          setCopiedId(true);
+          setTimeout(() => setCopiedId(false), 2000);
+      } else {
+          setCopiedArn(true);
+          setTimeout(() => setCopiedArn(false), 2000);
+      }
+  };
 
   return (
     <div className="p-4 hover:bg-[var(--bg-hover)]/30 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border)]/50 last:border-0 theme-transition group">
@@ -79,6 +93,24 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, o
         </div>
       </div>
       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+         <Button 
+            variant="secondary" 
+            size="sm" 
+            icon={copiedId ? Check : Copy} 
+            onClick={() => handleCopy(item.resourceId, 'id')}
+            className="shadow-sm border border-[var(--border)]"
+         >
+           {copiedId ? 'Copied' : 'ID'}
+         </Button>
+         <Button 
+            variant="secondary" 
+            size="sm" 
+            icon={copiedArn ? Check : Copy} 
+            onClick={() => handleCopy(item.arn, 'arn')}
+            className="shadow-sm border border-[var(--border)]"
+         >
+           {copiedArn ? 'Copied' : 'ARN'}
+         </Button>
          <Button 
             variant="secondary" 
             size="sm" 

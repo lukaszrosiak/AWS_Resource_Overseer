@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
-  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette
+  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette, Leaf
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -46,6 +46,7 @@ export const App = () => {
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<string>('dark-aws');
   const [serviceChartType, setServiceChartType] = useState<'pie' | 'bar'>('pie');
+  const [tagChartType, setTagChartType] = useState<'coverage' | 'environment'>('environment');
   
   // Navigation State
   const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam'>('welcome');
@@ -554,6 +555,20 @@ export const App = () => {
       .map(([name, items]) => ({ name, count: (items as InventoryItem[]).length }))
       .sort((a, b) => b.count - a.count);
   }, [groupedInventory]);
+
+  const environmentStats = useMemo(() => {
+      const stats: Record<string, number> = {};
+      filteredInventory.forEach(item => {
+          const env = item.tags['Environment'] || 'Unspecified';
+          stats[env] = (stats[env] || 0) + 1;
+      });
+      return Object.entries(stats).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+  }, [filteredInventory]);
+
+  const coverageStats = useMemo(() => [
+      { name: 'Tagged', value: filteredInventory.filter(e => Object.keys(e.tags).length > 0).length },
+      { name: 'Untagged', value: filteredInventory.filter(e => Object.keys(e.tags).length === 0).length }
+  ], [filteredInventory]);
 
   // Is assumed role?
   const isAssumedRole = useMemo(() => {
@@ -1198,24 +1213,50 @@ export const App = () => {
                 </Card>
 
                 <Card className="min-h-[400px]">
-                    <h3 className="text-lg font-semibold text-[var(--text-main)] mb-6">Tagging Coverage</h3>
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-semibold text-[var(--text-main)]">
+                            {tagChartType === 'environment' ? 'Environment Distribution' : 'Tagging Coverage'}
+                        </h3>
+                        <div className="flex bg-[var(--bg-main)] p-1 rounded-lg border border-[var(--border)]">
+                            <button 
+                                onClick={() => setTagChartType('environment')}
+                                className={`p-1.5 rounded transition-all flex items-center gap-1 text-xs font-medium ${tagChartType === 'environment' ? 'bg-[var(--bg-card)] shadow text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                                title="Environment Distribution"
+                            >
+                                <Leaf size={14} /> Env
+                            </button>
+                            <button 
+                                onClick={() => setTagChartType('coverage')}
+                                className={`p-1.5 rounded transition-all flex items-center gap-1 text-xs font-medium ${tagChartType === 'coverage' ? 'bg-[var(--bg-card)] shadow text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                                title="Tag Coverage"
+                            >
+                                <Tag size={14} /> Coverage
+                            </button>
+                        </div>
+                    </div>
                     <div className="h-[300px] w-full relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                         <Pie
-                            data={[
-                            { name: 'Tagged', value: filteredInventory.filter(e => Object.keys(e.tags).length > 0).length },
-                            { name: 'Untagged', value: filteredInventory.filter(e => Object.keys(e.tags).length === 0).length }
-                            ]}
+                            data={tagChartType === 'environment' ? environmentStats : coverageStats}
                             cx="50%"
                             cy="50%"
                             innerRadius={60}
                             outerRadius={100}
                             paddingAngle={5}
                             dataKey="value"
+                            label={tagChartType === 'environment' ? ({ name, percent }) => percent > 0.05 ? `${name}` : '' : undefined}
                         >
-                            <Cell key="tagged" fill="#10b981" stroke="var(--bg-card)" strokeWidth={2} />
-                            <Cell key="untagged" fill="#ef4444" stroke="var(--bg-card)" strokeWidth={2} />
+                            {tagChartType === 'environment' ? (
+                                environmentStats.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} stroke="var(--bg-card)" strokeWidth={2}/>
+                                ))
+                            ) : (
+                                <>
+                                    <Cell key="tagged" fill="#10b981" stroke="var(--bg-card)" strokeWidth={2} />
+                                    <Cell key="untagged" fill="#ef4444" stroke="var(--bg-card)" strokeWidth={2} />
+                                </>
+                            )}
                         </Pie>
                         <RechartsTooltip 
                             contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-main)' }}

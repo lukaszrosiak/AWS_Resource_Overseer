@@ -29,8 +29,8 @@ export const Button = ({ children, onClick, variant = 'primary', className = '',
   );
 };
 
-export const Card = ({ children, className = '' }: any) => (
-  <div className={`bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-6 theme-transition ${className}`}>
+export const Card = ({ children, className = '', ...props }: any) => (
+  <div className={`bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-6 theme-transition ${className}`} {...props}>
     {children}
   </div>
 );

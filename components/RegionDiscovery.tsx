@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Globe, Play, Loader2, ArrowRight, Server, Cloud, AlertTriangle, CheckCircle2, Workflow } from 'lucide-react';
 import { EC2Client, DescribeVpcsCommand, DescribeInstancesCommand } from "https://esm.sh/@aws-sdk/client-ec2?bundle";
@@ -108,7 +109,8 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
             const batch = regions.slice(i, i + batchSize);
             
             try {
-                const results = await Promise.all(batch.map(async (region) => {
+                // Use explicit typing to ensure results are correctly inferred
+                const results: { code: string; vpcCount: number; ec2Count: number; pipelineCount: number; error?: string }[] = await Promise.all(batch.map(async (region) => {
                     const result = await scanRegionResources(region.code);
                     return { code: region.code, ...result };
                 }));
@@ -116,7 +118,7 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                 // Update state incrementally
                 setScanResults(prev => {
                     const next = { ...prev };
-                    results.forEach((res: { code: string; vpcCount: number; ec2Count: number; pipelineCount: number; error?: string }) => {
+                    results.forEach((res) => {
                         next[res.code] = {
                             status: (res.vpcCount > 0 || res.ec2Count > 0 || res.pipelineCount > 0) ? 'active' : 'empty',
                             vpcCount: res.vpcCount,
@@ -175,151 +177,103 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
 
             {regionsWithResources > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <Card className="p-4 flex flex-col justify-center bg-blue-500/5 border-blue-500/20">
-                        <span className="text-[var(--text-muted)] text-xs font-bold uppercase">Active Regions</span>
-                        <span className="text-2xl font-bold text-blue-500">{regionsWithResources}</span>
+                    <Card className="p-4 flex flex-col items-center justify-center text-center">
+                        <span className="text-3xl font-bold text-[var(--accent)]">{regionsWithResources}</span>
+                        <span className="text-xs text-[var(--text-muted)] uppercase mt-1">Active Regions</span>
                     </Card>
-                    <Card className="p-4 flex flex-col justify-center">
-                         <span className="text-[var(--text-muted)] text-xs font-bold uppercase">Total VPCs</span>
-                         <span className="text-2xl font-bold text-[var(--text-main)]">{totalVpcs}</span>
+                    <Card className="p-4 flex flex-col items-center justify-center text-center">
+                        <span className="text-3xl font-bold text-[var(--text-main)]">{totalVpcs}</span>
+                        <span className="text-xs text-[var(--text-muted)] uppercase mt-1">Total VPCs</span>
                     </Card>
-                    <Card className="p-4 flex flex-col justify-center">
-                         <span className="text-[var(--text-muted)] text-xs font-bold uppercase">Total EC2 Instances</span>
-                         <span className="text-2xl font-bold text-[var(--text-main)]">{totalEc2}</span>
+                    <Card className="p-4 flex flex-col items-center justify-center text-center">
+                        <span className="text-3xl font-bold text-[var(--text-main)]">{totalEc2}</span>
+                        <span className="text-xs text-[var(--text-muted)] uppercase mt-1">Total EC2</span>
                     </Card>
-                    <Card className="p-4 flex flex-col justify-center">
-                         <span className="text-[var(--text-muted)] text-xs font-bold uppercase">Total Pipelines</span>
-                         <span className="text-2xl font-bold text-[var(--text-main)]">{totalPipelines}</span>
+                    <Card className="p-4 flex flex-col items-center justify-center text-center">
+                         <span className="text-3xl font-bold text-[var(--text-main)]">{totalPipelines}</span>
+                         <span className="text-xs text-[var(--text-muted)] uppercase mt-1">Pipelines</span>
                     </Card>
                 </div>
             )}
 
-            <div className="space-y-8">
-                {GROUP_ORDER.map(groupName => {
-                    const regions = groupedRegions[groupName];
-                    if (!regions || regions.length === 0) return null;
-
-                    const isGroupScanning = scanningGroups[groupName];
-
-                    return (
-                        <div key={groupName} className="animate-in fade-in duration-500">
-                             <div className="flex items-center justify-between mb-4 border-b border-[var(--border)] pb-2">
-                                <h3 className="text-lg font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center">
-                                    {groupName}
-                                    <span className="ml-2 px-2 py-0.5 bg-[var(--bg-hover)] rounded-full text-xs font-normal opacity-70">
-                                        {regions.length} regions
-                                    </span>
-                                </h3>
-                                <Button 
-                                    size="sm" 
-                                    variant="secondary"
-                                    onClick={() => scanGroup(groupName, regions)} 
-                                    disabled={isGroupScanning}
-                                    icon={isGroupScanning ? Loader2 : Play}
-                                    className={isGroupScanning ? "animate-pulse" : ""}
+            {GROUP_ORDER.map(groupName => (
+                <div key={groupName} className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+                        <h3 className="text-lg font-bold text-[var(--text-main)]">{groupName} Regions</h3>
+                        {scanningGroups[groupName] ? (
+                            <span className="text-xs text-[var(--accent)] flex items-center animate-pulse">
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Scanning...
+                            </span>
+                        ) : (
+                            <Button size="sm" variant="secondary" icon={Play} onClick={() => scanGroup(groupName, groupedRegions[groupName])}>
+                                Scan Group
+                            </Button>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {groupedRegions[groupName].map(region => {
+                            const state = scanResults[region.code] || { status: 'idle' };
+                            return (
+                                <Card 
+                                    key={region.code} 
+                                    className={`relative transition-all duration-300 ${state.status === 'active' ? 'border-[var(--accent)] bg-[var(--accent)]/5' : ''} ${state.status === 'error' ? 'border-red-500/50 bg-red-500/5' : ''}`}
                                 >
-                                    {isGroupScanning ? 'Scanning...' : 'Scan Group'}
-                                </Button>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {regions.map((region) => {
-                                    const state = scanResults[region.code] || { status: 'idle' };
-                                    const isActive = state.status === 'active';
-                                    const isEmpty = state.status === 'empty';
-                                    const hasVpc = (state.vpcCount || 0) > 0;
-                                    const hasEc2 = (state.ec2Count || 0) > 0;
-                                    const hasPipe = (state.pipelineCount || 0) > 0;
-                                    const isScanning = state.status === 'scanning';
-                                    const isIdle = state.status === 'idle';
-
-                                    // Render logic for count: Show 0 explicitly if scanned
-                                    const displayVpc = isIdle || isScanning ? '-' : (state.vpcCount || 0);
-                                    const displayEc2 = isIdle || isScanning ? '-' : (state.ec2Count || 0);
-                                    const displayPipe = isIdle || isScanning ? '-' : (state.pipelineCount || 0);
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex items-center space-x-2">
+                                            {state.status === 'active' && <CheckCircle2 className="w-4 h-4 text-[var(--accent)]" />}
+                                            {state.status === 'error' && <AlertTriangle className="w-4 h-4 text-red-500" />}
+                                            <span className={`font-mono text-sm ${state.status === 'active' ? 'font-bold text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>
+                                                {region.code}
+                                            </span>
+                                        </div>
+                                        {state.status === 'active' && (
+                                             <button 
+                                                onClick={() => onSwitchRegion(region.code)}
+                                                className="text-[10px] bg-[var(--accent)] text-white px-2 py-0.5 rounded hover:bg-[var(--accent-hover)] transition-colors flex items-center"
+                                             >
+                                                 Switch <ArrowRight className="w-3 h-3 ml-1" />
+                                             </button>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-[var(--text-muted)] truncate mb-3" title={region.name}>{region.name}</div>
                                     
-                                    return (
-                                        <Card 
-                                            key={region.code} 
-                                            className={`
-                                                relative p-4 transition-all duration-300 
-                                                ${isActive ? 'border-[var(--accent)] bg-[var(--accent)]/5 shadow-md' : 'opacity-100'}
-                                                ${isIdle ? 'opacity-60 grayscale-[0.5]' : ''}
-                                                ${isScanning ? 'border-[var(--accent)]/50' : ''}
-                                            `}
-                                        >
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex items-center space-x-2">
-                                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors ${isActive ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : isEmpty ? 'bg-[var(--text-muted)]' : 'bg-[var(--border)]'}`}></div>
-                                                    <div className="min-w-0">
-                                                        <h3 className={`font-bold text-sm truncate ${isActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{region.name}</h3>
-                                                        <code className="text-[10px] text-[var(--text-muted)] font-mono block">{region.code}</code>
-                                                    </div>
-                                                </div>
-                                                <div className="flex-shrink-0 ml-2 h-5">
-                                                    {isScanning && <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />}
-                                                    {state.error && (
-                                                        <div title={state.error} className="group/err relative">
-                                                            <AlertTriangle className="w-4 h-4 text-orange-500 cursor-help" />
-                                                        </div>
-                                                    )}
-                                                    {isEmpty && !state.error && <CheckCircle2 className="w-4 h-4 text-[var(--text-muted)] opacity-30" />}
-                                                </div>
+                                    {state.status === 'scanning' ? (
+                                        <div className="py-2 flex justify-center">
+                                            <Loader2 className="w-5 h-5 text-[var(--accent)] animate-spin" />
+                                        </div>
+                                    ) : state.status === 'active' ? (
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
+                                            <div className="bg-[var(--bg-card)] p-1.5 rounded border border-[var(--border)] text-center">
+                                                <div className="text-[10px] uppercase text-[var(--text-muted)]">VPC</div>
+                                                <div className="font-bold text-[var(--text-main)]">{state.vpcCount}</div>
                                             </div>
-
-                                            <div className="space-y-2 mt-4">
-                                                {/* VPC Count */}
-                                                <div className={`flex items-center justify-between text-xs p-2 rounded transition-colors ${hasVpc ? 'bg-[var(--bg-card)] border border-[var(--border)] shadow-sm' : 'bg-[var(--bg-hover)]/30 text-[var(--text-muted)]'}`}>
-                                                    <div className="flex items-center space-x-2">
-                                                        <Cloud className={`w-3.5 h-3.5 ${hasVpc ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] opacity-50'}`} />
-                                                        <span>VPCs</span>
-                                                    </div>
-                                                    <span className={`font-mono font-bold ${hasVpc ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>
-                                                        {displayVpc}
-                                                    </span>
-                                                </div>
-
-                                                {/* EC2 Count */}
-                                                <div className={`flex items-center justify-between text-xs p-2 rounded transition-colors ${hasEc2 ? 'bg-[var(--bg-card)] border border-[var(--border)] shadow-sm' : 'bg-[var(--bg-hover)]/30 text-[var(--text-muted)]'}`}>
-                                                    <div className="flex items-center space-x-2">
-                                                        <Server className={`w-3.5 h-3.5 ${hasEc2 ? 'text-orange-500' : 'text-[var(--text-muted)] opacity-50'}`} />
-                                                        <span>Instances</span>
-                                                    </div>
-                                                    <span className={`font-mono font-bold ${hasEc2 ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>
-                                                        {displayEc2}
-                                                    </span>
-                                                </div>
-
-                                                {/* CodePipeline Count */}
-                                                <div className={`flex items-center justify-between text-xs p-2 rounded transition-colors ${hasPipe ? 'bg-[var(--bg-card)] border border-[var(--border)] shadow-sm' : 'bg-[var(--bg-hover)]/30 text-[var(--text-muted)]'}`}>
-                                                    <div className="flex items-center space-x-2">
-                                                        <Workflow className={`w-3.5 h-3.5 ${hasPipe ? 'text-purple-500' : 'text-[var(--text-muted)] opacity-50'}`} />
-                                                        <span>Pipelines</span>
-                                                    </div>
-                                                    <span className={`font-mono font-bold ${hasPipe ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>
-                                                        {displayPipe}
-                                                    </span>
-                                                </div>
+                                            <div className="bg-[var(--bg-card)] p-1.5 rounded border border-[var(--border)] text-center">
+                                                <div className="text-[10px] uppercase text-[var(--text-muted)]">EC2</div>
+                                                <div className="font-bold text-[var(--text-main)]">{state.ec2Count}</div>
                                             </div>
-                                            
-                                            {isActive && (
-                                                <div className="mt-3 pt-3 border-t border-[var(--border)]/50 flex justify-end animate-in fade-in">
-                                                    <button 
-                                                        onClick={() => onSwitchRegion(region.code)}
-                                                        className="text-[var(--accent)] hover:text-[var(--accent-hover)] text-xs font-medium flex items-center transition-colors group/btn"
-                                                    >
-                                                        Explore Region <ArrowRight className="w-3 h-3 ml-1 group-hover/btn:translate-x-0.5 transition-transform" />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </Card>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
+                                            <div className="bg-[var(--bg-card)] p-1.5 rounded border border-[var(--border)] text-center">
+                                                <div className="text-[10px] uppercase text-[var(--text-muted)]">Pipe</div>
+                                                <div className="font-bold text-[var(--text-main)]">{state.pipelineCount}</div>
+                                            </div>
+                                        </div>
+                                    ) : state.status === 'error' ? (
+                                        <div className="text-xs text-red-400 mt-2">
+                                            Scan failed: {state.error}
+                                        </div>
+                                    ) : state.status === 'empty' ? (
+                                        <div className="text-xs text-[var(--text-muted)] italic mt-2 text-center opacity-50">
+                                            No resources found
+                                        </div>
+                                    ) : (
+                                        <div className="h-8"></div>
+                                    )}
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 };
