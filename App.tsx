@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
@@ -51,6 +50,7 @@ export const App = () => {
   const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam'>('welcome');
   const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs' | 'graph'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
+  const [resourceHistory, setResourceHistory] = useState<InventoryItem[]>([]);
   const [selectedLogResource, setSelectedLogResource] = useState<string | null>(null);
 
   // Filtering State
@@ -387,10 +387,15 @@ export const App = () => {
 
   const handleVisualize = (item: InventoryItem) => {
       setSelectedResource(item);
+      setResourceHistory([]); // Reset history when starting new visualization
       setView('graph');
   };
 
   const handleNodeSelect = (node: GraphNode) => {
+     if (selectedResource) {
+         setResourceHistory(prev => [...prev, selectedResource]);
+     }
+
      // Construct a temporary InventoryItem to navigate
      const newItem: InventoryItem = {
         resourceId: node.id,
@@ -403,6 +408,14 @@ export const App = () => {
      setSelectedResource(newItem);
   };
 
+  const handleGraphHistoryBack = () => {
+      if (resourceHistory.length === 0) return;
+      const previous = resourceHistory[resourceHistory.length - 1];
+      const newHistory = resourceHistory.slice(0, -1);
+      setSelectedResource(previous);
+      setResourceHistory(newHistory);
+  };
+
   const handleViewCwLogs = (resourceName: string) => {
       setSelectedLogResource(resourceName);
       setView('cwlogs');
@@ -412,6 +425,7 @@ export const App = () => {
       setView('dashboard');
       setSelectedResource(null);
       setSelectedLogResource(null);
+      setResourceHistory([]);
   };
 
   const generateAnalysis = async () => {
@@ -524,7 +538,7 @@ export const App = () => {
 
   const serviceStats = useMemo(() => {
     return Object.entries(groupedInventory)
-      .map(([name, items]) => ({ name, count: items.length }))
+      .map(([name, items]) => ({ name, count: (items as InventoryItem[]).length }))
       .sort((a, b) => b.count - a.count);
   }, [groupedInventory]);
 
@@ -671,6 +685,8 @@ export const App = () => {
             onBack={handleBackToDashboard}
             isMock={credentials.accessKeyId.startsWith('mock')}
             onNodeSelect={handleNodeSelect}
+            onHistoryBack={handleGraphHistoryBack}
+            canGoBack={resourceHistory.length > 0}
           />
       )
   }
