@@ -111,8 +111,3 @@ export interface CloudFormationStackSummary {
   TemplateDescription?: string;
   EnableTerminationProtection?: boolean;
 }
-
-export interface S3BucketSummary {
-  Name: string;
-  CreationDate: Date;
-}
