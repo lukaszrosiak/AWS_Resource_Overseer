@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Globe, Play, Loader2, ArrowRight, Server, Cloud, AlertTriangle, CheckCircle2, Workflow } from 'lucide-react';
 import { EC2Client, DescribeVpcsCommand, DescribeInstancesCommand } from "https://esm.sh/@aws-sdk/client-ec2?bundle";
@@ -117,21 +118,24 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
             
             try {
                 // Use explicit typing to ensure results are correctly inferred
-                const results: ScanResult[] = await Promise.all(batch.map(async (region) => {
+                const promises = batch.map(async (region): Promise<ScanResult> => {
                     const result = await scanRegionResources(region.code);
                     return { code: region.code, ...result };
-                }));
+                });
+
+                const results = await Promise.all(promises);
 
                 // Update state incrementally
                 setScanResults(prev => {
                     const next = { ...prev };
-                    results.forEach((res: ScanResult) => {
-                        next[res.code] = {
-                            status: (res.vpcCount > 0 || res.ec2Count > 0 || res.pipelineCount > 0) ? 'active' : 'empty',
-                            vpcCount: res.vpcCount,
-                            ec2Count: res.ec2Count,
-                            pipelineCount: res.pipelineCount,
-                            error: res.error
+                    results.forEach((res) => {
+                        const r = res as ScanResult;
+                        next[r.code] = {
+                            status: (r.vpcCount > 0 || r.ec2Count > 0 || r.pipelineCount > 0) ? 'active' : 'empty',
+                            vpcCount: r.vpcCount,
+                            ec2Count: r.ec2Count,
+                            pipelineCount: r.pipelineCount,
+                            error: r.error
                         };
                     });
                     return next;

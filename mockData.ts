@@ -1,8 +1,8 @@
 
-import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole, GraphNode, GraphLink, Ec2Instance } from './types';
+import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole, GraphNode, GraphLink, Ec2Instance, CloudFormationStackSummary } from './types';
 
 export const generateMockInventory = (): InventoryItem[] => {
-  const services = ['ec2', 's3', 'rds', 'lambda', 'dynamodb', 'vpc', 'elasticloadbalancing'];
+  const services = ['ec2', 's3', 'rds', 'lambda', 'dynamodb', 'vpc', 'elasticloadbalancing', 'kms'];
   const items: InventoryItem[] = [];
   const mockTags = [
     { Environment: 'Production', CostCenter: '1024', Project: 'Alpha' },
@@ -11,23 +11,38 @@ export const generateMockInventory = (): InventoryItem[] => {
     { Name: 'BastionHost', ManagedBy: 'Terraform' },
   ];
 
+  const kmsAliases = ['alias/production-db', 'alias/logs-encryption', 'alias/lambda-env', 'alias/backup-key', 'alias/s3-secure'];
+  const kmsStatuses = ['Enabled', 'Disabled', 'PendingDeletion', 'PendingImport'];
+
   for (let i = 0; i < 150; i++) {
     const service = services[Math.floor(Math.random() * services.length)];
     const randomId = Math.random().toString(36).substr(2, 8);
     let resourceType = 'generic';
+    let specificTags = {};
     
     if (service === 'ec2') {
         const ec2Types = ['instance', 'volume', 'security-group', 'snapshot', 'network-interface'];
         resourceType = ec2Types[Math.floor(Math.random() * ec2Types.length)];
     } else if (service === 's3') resourceType = 'bucket';
     else if (service === 'lambda') resourceType = 'function';
+    else if (service === 'kms') {
+        resourceType = 'key';
+        specificTags = {
+            'Alias': Math.random() > 0.3 ? kmsAliases[Math.floor(Math.random() * kmsAliases.length)] : undefined,
+            'Status': kmsStatuses[Math.floor(Math.random() * kmsStatuses.length)]
+        };
+    }
     
+    // Filter undefined tags
+    const mergedTags = { ...mockTags[Math.floor(Math.random() * mockTags.length)], ...specificTags };
+    Object.keys(mergedTags).forEach(key => (mergedTags as any)[key] === undefined && delete (mergedTags as any)[key]);
+
     items.push({
       arn: `arn:aws:${service}:eu-west-1:123456789012:${resourceType}/${service}-res-${randomId}`,
       service: service,
       resourceType: resourceType,
-      resourceId: `${service}-res-${randomId}`,
-      tags: mockTags[Math.floor(Math.random() * mockTags.length)]
+      resourceId: service === 'kms' ? randomId : `${service}-res-${randomId}`,
+      tags: mergedTags
     });
   }
   return items;
@@ -225,6 +240,26 @@ export const generateMockInstances = (): Ec2Instance[] => {
     ];
 };
 
+export const generateMockStacks = (): CloudFormationStackSummary[] => {
+  const statuses = ['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'ROLLBACK_COMPLETE', 'CREATE_IN_PROGRESS', 'DELETE_FAILED'];
+  const stacks: CloudFormationStackSummary[] = [];
+  
+  for(let i=0; i < 15; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+    const name = `stack-env-${i}-${Math.random().toString(36).substring(7)}`;
+    stacks.push({
+      StackName: name,
+      // Ensure StackId contains the StackName for robust matching in mock tests
+      StackId: `arn:aws:cloudformation:us-east-1:123456789012:stack/${name}/${Math.random().toString(36).substring(7)}`,
+      StackStatus: statuses[Math.floor(Math.random() * statuses.length)],
+      CreationTime: date,
+      TemplateDescription: i % 2 === 0 ? 'Managed by CDK/Terraform' : 'Manual deployment for testing'
+    });
+  }
+  return stacks;
+};
+
 // --- Graph Generation Logic ---
 
 const getMockNeighbors = (sourceId: string, type: string, service: string): { nodes: GraphNode[], links: GraphLink[] } => {
@@ -274,6 +309,10 @@ const getMockNeighbors = (sourceId: string, type: string, service: string): { no
     } else if (type === 'role') {
         add('policy-access', 'policy', 'iam', 'attached_to');
         add('instance-profile', 'instance-profile', 'iam', 'associated_with');
+    } else if (type === 'key') {
+        add('bucket-logs', 'bucket', 's3', 'encrypts');
+        add('rds-db-primary', 'cluster', 'rds', 'encrypts');
+        add('ebs-vol-1', 'volume', 'ec2', 'encrypts');
     } else {
         // Fallback generic neighbors
         add('vpc-default', 'vpc', 'vpc', 'in_network');

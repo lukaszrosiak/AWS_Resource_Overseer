@@ -102,3 +102,11 @@ export interface Ec2Instance {
   PingStatus: 'Online' | 'Offline' | 'Unknown'; // SSM Status
   LaunchTime: Date;
 }
+
+export interface CloudFormationStackSummary {
+  StackName: string;
+  StackId: string;
+  StackStatus: string;
+  CreationTime: Date;
+  TemplateDescription?: string;
+}

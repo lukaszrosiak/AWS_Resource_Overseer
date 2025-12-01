@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
-  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette, Leaf, MonitorPlay, Check
+  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette, Leaf, MonitorPlay, Check, FileStack
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -26,6 +26,7 @@ import { RegionDiscovery } from './components/RegionDiscovery';
 import { IamRoles } from './components/IamRoles';
 import { DependencyGraph } from './components/DependencyGraph';
 import { SSMConnect } from './components/SSMConnect';
+import { CloudFormationView } from './components/CloudFormationView';
 
 const THEMES = [
   { id: 'default', name: 'Default' },
@@ -50,7 +51,7 @@ export const App = () => {
   const [tagChartType, setTagChartType] = useState<'coverage' | 'environment'>('environment');
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam' | 'ssm'>('welcome');
+  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam' | 'ssm' | 'cloudformation'>('welcome');
   const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs' | 'graph'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
   const [resourceHistory, setResourceHistory] = useState<InventoryItem[]>([]);
@@ -823,6 +824,12 @@ export const App = () => {
                     <Layers className="w-4 h-4"/> Resource Overseer
                 </button>
                 <button 
+                    onClick={() => setActiveTab('cloudformation')}
+                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'cloudformation' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >
+                    <FileStack className="w-4 h-4"/> Stacks
+                </button>
+                <button 
                     onClick={() => setActiveTab('iam')}
                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'iam' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                 >
@@ -1002,6 +1009,20 @@ export const App = () => {
                         </div>
                     </Card>
 
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('cloudformation')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-teal-500/10 text-teal-500 group-hover:bg-teal-500 group-hover:text-white transition-colors">
+                                <FileStack className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">CloudFormation</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    Manage your infrastructure stacks. View status, inspect details, and bulk delete unused stacks.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
                     <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('iam')}>
                         <div className="flex items-start gap-4">
                             <div className="p-3 rounded-lg bg-pink-500/10 text-pink-500 group-hover:bg-pink-500 group-hover:text-white transition-colors">
@@ -1100,6 +1121,11 @@ export const App = () => {
             <IamRoles 
                 credentials={credentials} 
                 isMock={credentials.accessKeyId.startsWith('mock')} 
+            />
+        ) : activeTab === 'cloudformation' ? (
+            <CloudFormationView
+                credentials={credentials}
+                isMock={credentials.accessKeyId.startsWith('mock')}
             />
         ) : activeTab === 'discovery' ? (
             <RegionDiscovery 

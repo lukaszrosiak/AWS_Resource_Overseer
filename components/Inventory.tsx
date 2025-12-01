@@ -36,6 +36,10 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, o
   const region = item.arn.split(':')[3] || 'eu-west-1'; // Fallback extraction
   const consoleUrl = getAwsConsoleUrl(region, item.service, item.resourceId, item.resourceType);
 
+  const isKms = item.service === 'kms';
+  const alias = item.tags['Alias'];
+  const status = item.tags['Status'];
+
   return (
     <div className="p-4 hover:bg-[var(--bg-hover)]/30 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border)]/50 last:border-0 theme-transition group">
       <div className="flex-1 min-w-0 relative">
@@ -83,6 +87,11 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, o
                 </div>
               )}
             </div>
+            
+            {isKms && alias && (
+                <span className="text-xs text-[var(--text-muted)] italic font-mono px-1">({alias})</span>
+            )}
+
             {hasTags && (
               <span className="bg-[var(--bg-hover)] text-[var(--text-muted)] text-[10px] px-1.5 py-0.5 rounded flex items-center">
                 <Tag className="w-3 h-3 mr-1" /> {Object.keys(item.tags).length}
@@ -93,6 +102,15 @@ export const ResourceRow: React.FC<ResourceRowProps> = ({ item, onInvestigate, o
             <span className="bg-[var(--bg-card)] px-2 py-0.5 rounded border border-[var(--border)]">
                 Type: {item.resourceType}
             </span>
+            {isKms && status && (
+                <span className={`px-2 py-0.5 rounded border text-[10px] uppercase font-bold ${
+                    status === 'Enabled' ? 'border-green-500/30 text-green-600 bg-green-500/10' : 
+                    status === 'Disabled' ? 'border-red-500/30 text-red-600 bg-red-500/10' :
+                    'border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-hover)]'
+                }`}>
+                    {status}
+                </span>
+            )}
             <span className="hidden md:inline text-[10px] truncate max-w-[200px] opacity-70">{item.arn}</span>
         </div>
       </div>
@@ -149,16 +167,27 @@ export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onIn
   const [isOpen, setIsOpen] = useState(false);
 
   const groupedItems = useMemo(() => {
-    if (service !== 'ec2') return null;
+    if (service === 'ec2') {
+        const groups: Record<string, InventoryItem[]> = {};
+        items.forEach(item => {
+            const type = item.resourceType || 'unknown';
+            if (!groups[type]) groups[type] = [];
+            groups[type].push(item);
+        });
+        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+    }
+    
+    if (service === 'kms') {
+        const groups: Record<string, InventoryItem[]> = {};
+        items.forEach(item => {
+            const status = item.tags['Status'] || 'Unknown';
+            if (!groups[status]) groups[status] = [];
+            groups[status].push(item);
+        });
+        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+    }
 
-    const groups: Record<string, InventoryItem[]> = {};
-    items.forEach(item => {
-        const type = item.resourceType || 'unknown';
-        if (!groups[type]) groups[type] = [];
-        groups[type].push(item);
-    });
-
-    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+    return null;
   }, [service, items]);
 
   return (
@@ -186,7 +215,7 @@ export const ServiceGroup: React.FC<ServiceGroupProps> = ({ service, items, onIn
              groupedItems.map(([type, groupItems]) => (
                  <div key={type} className="border-b border-[var(--border)]/30 last:border-0">
                      <div className="bg-[var(--bg-main)] px-4 py-2 border-y border-[var(--border)]/50 flex items-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]/50 mr-2"></div>
+                        <div className={`w-1.5 h-1.5 rounded-full mr-2 ${service === 'kms' ? (type === 'Enabled' ? 'bg-green-500' : type === 'Disabled' ? 'bg-red-500' : 'bg-gray-400') : 'bg-[var(--accent)]/50'}`}></div>
                         <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
                             {type} <span className="opacity-50 ml-1">({groupItems.length})</span>
                         </span>
