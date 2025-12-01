@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Globe, Play, Loader2, ArrowRight, Server, Cloud, AlertTriangle, CheckCircle2, Workflow } from 'lucide-react';
 import { EC2Client, DescribeVpcsCommand, DescribeInstancesCommand } from "https://esm.sh/@aws-sdk/client-ec2?bundle";
@@ -118,17 +117,18 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
             
             try {
                 // Use explicit typing to ensure results are correctly inferred
-                const promises: Promise<ScanResult>[] = batch.map(async (region) => {
+                const promises = batch.map(async (region) => {
                     const result = await scanRegionResources(region.code);
-                    return { code: region.code, ...result };
+                    return { code: region.code, ...result } as ScanResult;
                 });
 
-                const results = await Promise.all(promises) as ScanResult[];
+                const results = await Promise.all(promises);
 
                 // Update state incrementally
                 setScanResults(prev => {
                     const next = { ...prev };
-                    results.forEach((r: ScanResult) => {
+                    results.forEach((item) => {
+                        const r = item as ScanResult;
                         next[r.code] = {
                             status: (r.vpcCount > 0 || r.ec2Count > 0 || r.pipelineCount > 0) ? 'active' : 'empty',
                             vpcCount: r.vpcCount,

@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
-  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette, Leaf, MonitorPlay, Check, FileStack
+  Filter, Plus, X, PieChart as PieIcon, BarChart2, Cpu, Terminal, ChevronDown, Search, Home, Users, ArrowRightLeft, CheckCircle2, RotateCcw, UserCog, Palette, Leaf, MonitorPlay, Check, FileStack, HardDrive
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -26,6 +27,7 @@ import { IamRoles } from './components/IamRoles';
 import { DependencyGraph } from './components/DependencyGraph';
 import { SSMConnect } from './components/SSMConnect';
 import { CloudFormationView } from './components/CloudFormationView';
+import { S3BucketView } from './components/S3BucketView';
 
 const THEMES = [
   { id: 'default', name: 'Default' },
@@ -50,7 +52,7 @@ export const App = () => {
   const [tagChartType, setTagChartType] = useState<'coverage' | 'environment'>('environment');
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam' | 'ssm' | 'cloudformation'>('welcome');
+  const [activeTab, setActiveTab] = useState<'welcome' | 'inventory' | 'bedrock' | 'logs' | 'discovery' | 'iam' | 'ssm' | 'cloudformation' | 's3'>('welcome');
   const [view, setView] = useState<'dashboard' | 'investigate' | 'cwlogs' | 'graph'>('dashboard');
   const [selectedResource, setSelectedResource] = useState<InventoryItem | null>(null);
   const [resourceHistory, setResourceHistory] = useState<InventoryItem[]>([]);
@@ -831,6 +833,12 @@ export const App = () => {
                     <FileStack className="w-4 h-4"/> Stacks
                 </button>
                 <button 
+                    onClick={() => setActiveTab('s3')}
+                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 's3' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >
+                    <HardDrive className="w-4 h-4"/> S3 Buckets
+                </button>
+                <button 
                     onClick={() => setActiveTab('iam')}
                     className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'iam' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                 >
@@ -1024,6 +1032,20 @@ export const App = () => {
                         </div>
                     </Card>
 
+                    <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('s3')}>
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-lg bg-yellow-500/10 text-yellow-500 group-hover:bg-yellow-500 group-hover:text-white transition-colors">
+                                <HardDrive className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">S3 Buckets</h3>
+                                <p className="text-[var(--text-muted)] text-sm">
+                                    List and manage S3 storage buckets. Empty and delete buckets safely with bulk actions.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
                     <Card className="hover:border-[var(--accent)] transition-colors cursor-pointer group" onClick={() => setActiveTab('iam')}>
                         <div className="flex items-start gap-4">
                             <div className="p-3 rounded-lg bg-pink-500/10 text-pink-500 group-hover:bg-pink-500 group-hover:text-white transition-colors">
@@ -1125,6 +1147,11 @@ export const App = () => {
             />
         ) : activeTab === 'cloudformation' ? (
             <CloudFormationView
+                credentials={credentials}
+                isMock={credentials.accessKeyId.startsWith('mock')}
+            />
+        ) : activeTab === 's3' ? (
+            <S3BucketView
                 credentials={credentials}
                 isMock={credentials.accessKeyId.startsWith('mock')}
             />

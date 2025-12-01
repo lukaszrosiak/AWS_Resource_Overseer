@@ -24,6 +24,7 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
     
     // Protection Toggle State
     const [togglingProtectionId, setTogglingProtectionId] = useState<string | null>(null);
+    const [protectionConfirmStack, setProtectionConfirmStack] = useState<CloudFormationStackSummary | null>(null);
 
     // Filtering & Sorting
     const [searchTerm, setSearchTerm] = useState('');
@@ -53,8 +54,6 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                 }
             });
 
-            // Switched from ListStacksCommand to DescribeStacksCommand because ListStacks
-            // does NOT return EnableTerminationProtection status. DescribeStacks does.
             const command = new DescribeStacksCommand({});
             const response = await client.send(command);
             
@@ -63,11 +62,10 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                 StackId: s.StackId || 'unknown',
                 StackStatus: s.StackStatus || 'UNKNOWN',
                 CreationTime: s.CreationTime ? new Date(s.CreationTime) : new Date(),
-                TemplateDescription: s.Description, // DescribeStacks uses 'Description', ListStacks uses 'TemplateDescription'
+                TemplateDescription: s.Description, 
                 EnableTerminationProtection: s.EnableTerminationProtection || false
             }));
 
-            // Filter similar to ListStacks filter for cleaner view
             const filtered = mappedStacks.filter(s => s.StackStatus !== 'DELETE_COMPLETE');
             setStacks(filtered);
 
@@ -88,7 +86,7 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
             setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
             setSortKey(key);
-            setSortDir(key === 'time' ? 'desc' : 'asc'); // Default newest for time, A-Z for name
+            setSortDir(key === 'time' ? 'desc' : 'asc'); 
         }
     };
 
@@ -112,8 +110,19 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
         }
     };
 
-    const handleToggleTerminationProtection = async (stackName: string, currentStatus: boolean) => {
+    const initiateToggleProtection = (stack: CloudFormationStackSummary) => {
+        if (stack.EnableTerminationProtection) {
+            // Confirm before disabling
+            setProtectionConfirmStack(stack);
+        } else {
+            // Enabling is safe, do it immediately
+            performToggleProtection(stack.StackName, false);
+        }
+    };
+
+    const performToggleProtection = async (stackName: string, currentStatus: boolean) => {
         setTogglingProtectionId(stackName);
+        setProtectionConfirmStack(null);
         
         if (isMock) {
             setTimeout(() => {
@@ -141,7 +150,6 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
             });
             await client.send(command);
 
-            // Optimistic update
             setStacks(prev => prev.map(s => 
                 s.StackName === stackName ? { ...s, EnableTerminationProtection: !currentStatus } : s
             ));
@@ -153,14 +161,13 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
         }
     };
 
-    const confirmDelete = async () => {
+    const performDelete = async () => {
         setDeleting(true);
         setDeleteSuccess(null);
         setError(null);
 
         if (isMock) {
             setTimeout(() => {
-                // Filter out stacks where either ID or Name matches the selection (robustness for mock data)
                 setStacks(prev => prev.filter(s => !selectedStackIds.has(s.StackId) && !selectedStackIds.has(s.StackName)));
                 setSelectedStackIds(new Set());
                 setDeleting(false);
@@ -183,10 +190,14 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
 
             // Execute deletions in parallel
             const promises = Array.from(selectedStackIds).map(async (id) => {
-                // Check protection status first just in case
                 const stack = stacks.find(s => s.StackId === id || s.StackName === id);
+                
+                // If stack is protected, disable protection first
                 if (stack?.EnableTerminationProtection) {
-                    throw new Error(`Stack ${stack.StackName} has termination protection enabled. Disable it first.`);
+                    await client.send(new UpdateTerminationProtectionCommand({
+                        StackName: id,
+                        EnableTerminationProtection: false
+                    }));
                 }
 
                 const command = new DeleteStackCommand({ StackName: id });
@@ -199,7 +210,6 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
             setSelectedStackIds(new Set());
             setShowDeleteConfirm(false);
             
-            // Refresh list after brief delay to allow AWS to update status to DELETE_IN_PROGRESS
             setTimeout(fetchStacks, 2000);
             setTimeout(() => setDeleteSuccess(null), 5000);
             
@@ -229,6 +239,13 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
         });
     }, [filteredStacks, sortKey, sortDir]);
 
+    // Derived state for confirmation modal
+    const protectedCountInSelection = useMemo(() => {
+        return stacks.filter(s => 
+            selectedStackIds.has(s.StackId || s.StackName) && s.EnableTerminationProtection
+        ).length;
+    }, [stacks, selectedStackIds]);
+
     const getStatusColor = (status: string) => {
         if (status.includes('COMPLETE') && !status.includes('ROLLBACK') && !status.includes('DELETE')) return 'text-green-500 bg-green-500/10 border-green-500/20';
         if (status.includes('FAILED') || status.includes('ROLLBACK')) return 'text-red-500 bg-red-500/10 border-red-500/20';
@@ -239,7 +256,7 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
             
-            {/* Confirmation Modal */}
+            {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
                 <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-6 max-w-md w-full shadow-2xl m-4">
@@ -255,17 +272,68 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                             </button>
                         </div>
                         
-                        <p className="text-[var(--text-muted)] mb-6 leading-relaxed">
-                            Are you sure you want to delete <span className="font-bold text-[var(--text-main)]">{selectedStackIds.size}</span> stacks? 
-                            This will terminate all resources associated with them. This action cannot be undone.
-                        </p>
+                        <div className="text-[var(--text-muted)] mb-6 text-sm leading-relaxed space-y-3">
+                            <p>
+                                Are you sure you want to delete <span className="font-bold text-[var(--text-main)]">{selectedStackIds.size}</span> stacks? 
+                                This will terminate all resources associated with them.
+                            </p>
+                            
+                            {protectedCountInSelection > 0 && (
+                                <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 text-orange-600 dark:text-orange-400 flex items-start gap-2">
+                                    <Shield className="w-4 h-4 mt-0.5 shrink-0" />
+                                    <span>
+                                        <b>Warning:</b> {protectedCountInSelection} selected stack{protectedCountInSelection > 1 ? 's have' : ' has'} Termination Protection enabled. 
+                                        Approving this will <u>forcibly disable</u> protection and delete them.
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                         
                         <div className="flex justify-end gap-3">
                             <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
                                 Cancel
                             </Button>
-                            <Button variant="danger" onClick={confirmDelete} disabled={deleting} icon={deleting ? Loader2 : Trash2}>
-                                {deleting ? 'Deleting...' : 'Confirm Delete'}
+                            <Button variant="danger" onClick={performDelete} disabled={deleting} icon={deleting ? Loader2 : Trash2}>
+                                {deleting ? 'Deleting...' : (protectedCountInSelection > 0 ? 'Force Delete' : 'Confirm Delete')}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Disable Protection Confirmation Modal */}
+            {protectionConfirmStack && (
+                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-6 max-w-md w-full shadow-2xl m-4">
+                        <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-full text-orange-600">
+                                    <ShieldOff className="w-6 h-6" />
+                                </div>
+                                <h3 className="text-lg font-bold text-[var(--text-main)]">Disable Protection?</h3>
+                            </div>
+                            <button onClick={() => setProtectionConfirmStack(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <p className="text-[var(--text-muted)] mb-6 leading-relaxed text-sm">
+                            You are about to disable Termination Protection for stack <span className="font-bold text-[var(--text-main)]">{protectionConfirmStack.StackName}</span>.
+                            <br/><br/>
+                            Once disabled, this stack can be permanently deleted by anyone with sufficient permissions.
+                        </p>
+                        
+                        <div className="flex justify-end gap-3">
+                            <Button variant="secondary" onClick={() => setProtectionConfirmStack(null)}>
+                                Keep Protected
+                            </Button>
+                            <Button 
+                                variant="primary" 
+                                onClick={() => performToggleProtection(protectionConfirmStack.StackName, true)}
+                                className="bg-orange-500 hover:bg-orange-600 text-white"
+                                icon={ShieldOff}
+                            >
+                                Disable Protection
                             </Button>
                         </div>
                     </div>
@@ -390,8 +458,7 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                                     checked={isSelected}
                                     onChange={() => toggleSelection(stack.StackId || stack.StackName)}
                                     className="w-4 h-4 rounded border-gray-300 text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer shrink-0"
-                                    disabled={isProtected} // Can't delete protected stacks anyway
-                                    title={isProtected ? "Disable termination protection to select" : "Select stack"}
+                                    title="Select stack"
                                 />
                                 
                                 <div className="flex-1 min-w-0">
@@ -409,7 +476,7 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                                 {/* Termination Protection Toggle */}
                                 <div className="flex items-center justify-center w-24 shrink-0">
                                     <button
-                                        onClick={() => handleToggleTerminationProtection(stack.StackName, !!isProtected)}
+                                        onClick={() => initiateToggleProtection(stack)}
                                         disabled={isToggling}
                                         className={`p-1.5 rounded-full transition-colors flex items-center gap-1.5 group/protect ${isProtected 
                                             ? 'text-green-600 bg-green-500/10 hover:bg-green-500/20' 

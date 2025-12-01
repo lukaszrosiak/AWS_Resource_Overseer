@@ -1,5 +1,5 @@
 
-import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole, GraphNode, GraphLink, Ec2Instance, CloudFormationStackSummary } from './types';
+import { InventoryItem, CloudTrailEvent, BedrockRuntime, LogGroup, LogEvent, IamRole, GraphNode, GraphLink, Ec2Instance, CloudFormationStackSummary, S3BucketSummary } from './types';
 
 export const generateMockInventory = (): InventoryItem[] => {
   const services = ['ec2', 's3', 'rds', 'lambda', 'dynamodb', 'vpc', 'elasticloadbalancing', 'kms'];
@@ -250,7 +250,6 @@ export const generateMockStacks = (): CloudFormationStackSummary[] => {
     const name = `stack-env-${i}-${Math.random().toString(36).substring(7)}`;
     stacks.push({
       StackName: name,
-      // Ensure StackId contains the StackName for robust matching in mock tests
       StackId: `arn:aws:cloudformation:us-east-1:123456789012:stack/${name}/${Math.random().toString(36).substring(7)}`,
       StackStatus: statuses[Math.floor(Math.random() * statuses.length)],
       CreationTime: date,
@@ -259,6 +258,26 @@ export const generateMockStacks = (): CloudFormationStackSummary[] => {
     });
   }
   return stacks;
+};
+
+export const generateMockBuckets = (): S3BucketSummary[] => {
+    const buckets: S3BucketSummary[] = [];
+    const prefixes = ['data-lake', 'assets', 'logs', 'backup', 'website', 'config', 'terraform-state'];
+    const envs = ['prod', 'dev', 'staging', 'test'];
+
+    for (let i = 0; i < 25; i++) {
+        const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+        const env = envs[Math.floor(Math.random() * envs.length)];
+        const rand = Math.random().toString(36).substring(7);
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 365));
+        
+        buckets.push({
+            Name: `${prefix}-${env}-${rand}`,
+            CreationDate: date
+        });
+    }
+    return buckets.sort((a, b) => b.CreationDate.getTime() - a.CreationDate.getTime());
 };
 
 // --- Graph Generation Logic ---
