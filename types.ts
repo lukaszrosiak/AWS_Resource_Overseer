@@ -109,4 +109,5 @@ export interface CloudFormationStackSummary {
   StackStatus: string;
   CreationTime: Date;
   TemplateDescription?: string;
+  EnableTerminationProtection?: boolean;
 }

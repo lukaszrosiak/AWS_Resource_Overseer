@@ -254,7 +254,8 @@ export const generateMockStacks = (): CloudFormationStackSummary[] => {
       StackId: `arn:aws:cloudformation:us-east-1:123456789012:stack/${name}/${Math.random().toString(36).substring(7)}`,
       StackStatus: statuses[Math.floor(Math.random() * statuses.length)],
       CreationTime: date,
-      TemplateDescription: i % 2 === 0 ? 'Managed by CDK/Terraform' : 'Manual deployment for testing'
+      TemplateDescription: i % 2 === 0 ? 'Managed by CDK/Terraform' : 'Manual deployment for testing',
+      EnableTerminationProtection: Math.random() > 0.7 // 30% chance of being protected
     });
   }
   return stacks;

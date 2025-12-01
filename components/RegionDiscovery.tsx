@@ -118,18 +118,17 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
             
             try {
                 // Use explicit typing to ensure results are correctly inferred
-                const promises = batch.map(async (region): Promise<ScanResult> => {
+                const promises: Promise<ScanResult>[] = batch.map(async (region) => {
                     const result = await scanRegionResources(region.code);
                     return { code: region.code, ...result };
                 });
 
-                const results = await Promise.all(promises);
+                const results = await Promise.all(promises) as ScanResult[];
 
                 // Update state incrementally
                 setScanResults(prev => {
                     const next = { ...prev };
-                    results.forEach((res) => {
-                        const r = res as ScanResult;
+                    results.forEach((r: ScanResult) => {
                         next[r.code] = {
                             status: (r.vpcCount > 0 || r.ec2Count > 0 || r.pipelineCount > 0) ? 'active' : 'empty',
                             vpcCount: r.vpcCount,

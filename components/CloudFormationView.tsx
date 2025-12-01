@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Layers, Search, Trash2, RefreshCw, Filter, Calendar, Clock, AlertTriangle, CheckCircle2, XCircle, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
-import { CloudFormationClient, ListStacksCommand, DeleteStackCommand } from "https://esm.sh/@aws-sdk/client-cloudformation?bundle";
+import { Layers, Search, Trash2, RefreshCw, Filter, Calendar, Clock, AlertTriangle, CheckCircle2, XCircle, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X, Shield, ShieldOff, Lock } from 'lucide-react';
+import { CloudFormationClient, DescribeStacksCommand, DeleteStackCommand, UpdateTerminationProtectionCommand } from "https://esm.sh/@aws-sdk/client-cloudformation?bundle";
 import { AwsCredentials, CloudFormationStackSummary } from '../types';
 import { generateMockStacks } from '../mockData';
 import { Button, Card } from './UI';
@@ -22,6 +22,9 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
     const [deleting, setDeleting] = useState(false);
     const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
     
+    // Protection Toggle State
+    const [togglingProtectionId, setTogglingProtectionId] = useState<string | null>(null);
+
     // Filtering & Sorting
     const [searchTerm, setSearchTerm] = useState('');
     const [sortKey, setSortKey] = useState<'name' | 'time'>('time');
@@ -30,8 +33,6 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
     const fetchStacks = async () => {
         setLoading(true);
         setError(null);
-        // Do not clear selection on refresh to allow persisting selections across polls if needed,
-        // but for now let's keep it simple and clear to avoid ghost selections
         setSelectedStackIds(new Set());
 
         if (isMock) {
@@ -52,27 +53,24 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                 }
             });
 
-            const command = new ListStacksCommand({
-                // Filter out DELETE_COMPLETE to keep list clean
-                StackStatusFilter: [
-                    'CREATE_IN_PROGRESS', 'CREATE_FAILED', 'CREATE_COMPLETE',
-                    'ROLLBACK_IN_PROGRESS', 'ROLLBACK_FAILED', 'ROLLBACK_COMPLETE',
-                    'DELETE_IN_PROGRESS', 'DELETE_FAILED',
-                    'UPDATE_IN_PROGRESS', 'UPDATE_COMPLETE_CLEANUP_IN_PROGRESS', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_IN_PROGRESS', 'UPDATE_ROLLBACK_FAILED', 'UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS', 'UPDATE_ROLLBACK_COMPLETE',
-                    'REVIEW_IN_PROGRESS', 'IMPORT_IN_PROGRESS', 'IMPORT_COMPLETE', 'IMPORT_ROLLBACK_IN_PROGRESS', 'IMPORT_ROLLBACK_FAILED', 'IMPORT_ROLLBACK_COMPLETE'
-                ]
-            });
+            // Switched from ListStacksCommand to DescribeStacksCommand because ListStacks
+            // does NOT return EnableTerminationProtection status. DescribeStacks does.
+            const command = new DescribeStacksCommand({});
             const response = await client.send(command);
             
-            const mappedStacks: CloudFormationStackSummary[] = (response.StackSummaries || []).map(s => ({
+            const mappedStacks: CloudFormationStackSummary[] = (response.Stacks || []).map(s => ({
                 StackName: s.StackName || 'unknown',
                 StackId: s.StackId || 'unknown',
                 StackStatus: s.StackStatus || 'UNKNOWN',
                 CreationTime: s.CreationTime ? new Date(s.CreationTime) : new Date(),
-                TemplateDescription: s.TemplateDescription
+                TemplateDescription: s.Description, // DescribeStacks uses 'Description', ListStacks uses 'TemplateDescription'
+                EnableTerminationProtection: s.EnableTerminationProtection || false
             }));
 
-            setStacks(mappedStacks);
+            // Filter similar to ListStacks filter for cleaner view
+            const filtered = mappedStacks.filter(s => s.StackStatus !== 'DELETE_COMPLETE');
+            setStacks(filtered);
+
         } catch (err: any) {
             console.error("CloudFormation Error", err);
             setError(err.message || "Failed to list stacks.");
@@ -114,6 +112,47 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
         }
     };
 
+    const handleToggleTerminationProtection = async (stackName: string, currentStatus: boolean) => {
+        setTogglingProtectionId(stackName);
+        
+        if (isMock) {
+            setTimeout(() => {
+                setStacks(prev => prev.map(s => 
+                    s.StackName === stackName ? { ...s, EnableTerminationProtection: !currentStatus } : s
+                ));
+                setTogglingProtectionId(null);
+            }, 600);
+            return;
+        }
+
+        try {
+            const client = new CloudFormationClient({
+                region: credentials.region,
+                credentials: {
+                    accessKeyId: credentials.accessKeyId,
+                    secretAccessKey: credentials.secretAccessKey,
+                    sessionToken: credentials.sessionToken || undefined,
+                }
+            });
+
+            const command = new UpdateTerminationProtectionCommand({
+                StackName: stackName,
+                EnableTerminationProtection: !currentStatus
+            });
+            await client.send(command);
+
+            // Optimistic update
+            setStacks(prev => prev.map(s => 
+                s.StackName === stackName ? { ...s, EnableTerminationProtection: !currentStatus } : s
+            ));
+        } catch (err: any) {
+            console.error("Failed to update protection", err);
+            setError(`Failed to update protection for ${stackName}: ${err.message}`);
+        } finally {
+            setTogglingProtectionId(null);
+        }
+    };
+
     const confirmDelete = async () => {
         setDeleting(true);
         setDeleteSuccess(null);
@@ -144,8 +183,12 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
 
             // Execute deletions in parallel
             const promises = Array.from(selectedStackIds).map(async (id) => {
-                // Find stack name if ID is an ARN, though DeleteStack accepts name or ID
-                // Prefer ID if available for precision
+                // Check protection status first just in case
+                const stack = stacks.find(s => s.StackId === id || s.StackName === id);
+                if (stack?.EnableTerminationProtection) {
+                    throw new Error(`Stack ${stack.StackName} has termination protection enabled. Disable it first.`);
+                }
+
                 const command = new DeleteStackCommand({ StackName: id });
                 await client.send(command);
             });
@@ -324,13 +367,18 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                             />
                             <span>{filteredStacks.length} Stacks</span>
                         </div>
-                        <div className="hidden md:block">Creation Time</div>
+                        <div className="flex items-center gap-8">
+                            <div className="hidden md:block w-24 text-center">Protection</div>
+                            <div className="hidden md:block w-32 text-right">Creation Time</div>
+                        </div>
                     </div>
 
                     {sortedStacks.map(stack => {
                         const isSelected = selectedStackIds.has(stack.StackId || stack.StackName);
                         const statusColor = getStatusColor(stack.StackStatus);
                         const isDeleting = stack.StackStatus === 'DELETE_IN_PROGRESS';
+                        const isProtected = stack.EnableTerminationProtection;
+                        const isToggling = togglingProtectionId === stack.StackName;
 
                         return (
                             <div 
@@ -342,6 +390,8 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                                     checked={isSelected}
                                     onChange={() => toggleSelection(stack.StackId || stack.StackName)}
                                     className="w-4 h-4 rounded border-gray-300 text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer shrink-0"
+                                    disabled={isProtected} // Can't delete protected stacks anyway
+                                    title={isProtected ? "Disable termination protection to select" : "Select stack"}
                                 />
                                 
                                 <div className="flex-1 min-w-0">
@@ -355,8 +405,28 @@ export const CloudFormationView: React.FC<CloudFormationViewProps> = ({ credenti
                                     </div>
                                     <p className="text-xs text-[var(--text-muted)] truncate">{stack.TemplateDescription || 'No description provided.'}</p>
                                 </div>
+                                
+                                {/* Termination Protection Toggle */}
+                                <div className="flex items-center justify-center w-24 shrink-0">
+                                    <button
+                                        onClick={() => handleToggleTerminationProtection(stack.StackName, !!isProtected)}
+                                        disabled={isToggling}
+                                        className={`p-1.5 rounded-full transition-colors flex items-center gap-1.5 group/protect ${isProtected 
+                                            ? 'text-green-600 bg-green-500/10 hover:bg-green-500/20' 
+                                            : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'}`}
+                                        title={isProtected ? "Termination Protection Enabled. Click to disable." : "Termination Protection Disabled. Click to enable."}
+                                    >
+                                        {isToggling ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : isProtected ? (
+                                            <Shield className="w-4 h-4" />
+                                        ) : (
+                                            <ShieldOff className="w-4 h-4 opacity-50 group-hover/protect:opacity-100" />
+                                        )}
+                                    </button>
+                                </div>
 
-                                <div className="flex flex-col items-end shrink-0 text-xs text-[var(--text-muted)]">
+                                <div className="flex flex-col items-end shrink-0 text-xs text-[var(--text-muted)] w-32">
                                     <div className="flex items-center gap-1" title={stack.CreationTime.toLocaleString()}>
                                         <Calendar className="w-3 h-3" />
                                         <span>{stack.CreationTime.toLocaleDateString()}</span>

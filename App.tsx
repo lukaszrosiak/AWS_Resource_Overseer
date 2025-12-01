@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, Key, LogOut, AlertTriangle, BrainCircuit, Server, Tag, Box, Layers, Globe,
@@ -578,6 +577,8 @@ export const App = () => {
       return credentials.accessKeyId !== originalCredentials.accessKeyId;
   }, [credentials, originalCredentials]);
 
+  const isOrgAccessError = error?.includes("Failed to list organization accounts");
+
   // Group accounts by OU
   const groupedAccounts = useMemo(() => {
       const groups: Record<string, OrgAccount[]> = {};
@@ -893,7 +894,7 @@ export const App = () => {
                     </div>
 
                     {!isAssumedRole ? (
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                        <div className={`grid grid-cols-1 md:grid-cols-12 gap-4 items-end transition-opacity duration-200 ${isOrgAccessError ? 'opacity-40 pointer-events-none select-none' : ''}`}>
                             <div className="md:col-span-5">
                                 <label className="block text-xs font-bold text-[var(--text-muted)] mb-1 uppercase">Target Account</label>
                                 <div className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg h-[200px] overflow-y-auto custom-scrollbar p-1">
