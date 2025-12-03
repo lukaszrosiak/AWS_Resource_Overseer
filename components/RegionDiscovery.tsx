@@ -122,7 +122,7 @@ export const RegionDiscovery: React.FC<RegionDiscoveryProps> = ({ credentials, i
                     return { code: region.code, ...result } as ScanResult;
                 });
 
-                const results = await Promise.all(promises);
+                const results: ScanResult[] = await Promise.all(promises);
 
                 // Update state incrementally
                 setScanResults(prev => {
