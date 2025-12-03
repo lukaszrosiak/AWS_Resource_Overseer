@@ -78,6 +78,12 @@ This application runs entirely client-side.
 -   **AWS Credentials**: Credentials entered into the UI are used solely to make direct calls to AWS APIs from your browser. They are **not** sent to any backend server and are **not** persisted in local storage/cookies.
 -   **API Keys**: The Google API key is used for the AI features.
 
+## Author
+
+Lukasz Rosiak
+
+GitHub: @lukaszrosiak
+
 ## License
 
 MIT
