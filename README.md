@@ -16,6 +16,20 @@ A comprehensive React-based dashboard for exploring, monitoring, and auditing AW
 -   **AI-Powered Audits**: Generate instant inventory summaries and tagging compliance reports using Google Gemini models.
 -   **Theming**: Includes multiple themes such as Dark, Light, and AWS Console-inspired styles.
 
+## Screenshots
+
+![Inventory Dashboard](https://placehold.co/1000x500/1e293b/cbd5e1?text=Inventory+Dashboard&font=roboto)
+*Unified Resource Inventory with filtering, stats, and theme selection.*
+
+![Dependency Graph](https://placehold.co/1000x500/1e293b/cbd5e1?text=Dependency+Graph&font=roboto)
+*Interactive visualization of resource relationships (e.g., EC2 -> SG -> VPC).*
+
+![Log Explorer](https://placehold.co/1000x500/1e293b/cbd5e1?text=Log+Explorer+%26+AI&font=roboto)
+*Real-time log streaming and SQL querying with integrated AI analysis.*
+
+![Region Discovery](https://placehold.co/1000x500/1e293b/cbd5e1?text=Region+Discovery&font=roboto)
+*Global scan for active VPCs and instances across all AWS regions.*
+
 ## Prerequisites
 
 -   **Node.js**: v18 or higher recommended.
